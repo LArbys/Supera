@@ -17,7 +17,12 @@
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
+#include "RawData/RawDigit.h"
+
+#include "db_lmdb.h"
 #include "caffe.pb.h"
+
+const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
 class Supera;
 
@@ -40,7 +45,8 @@ public:
 private:
 
   // Declare member data here.
-
+  MDB_env *mdb_env_;
+  MDB_txn *mdb_txn_;
 };
 
 
@@ -48,7 +54,16 @@ Supera::Supera(fhicl::ParameterSet const & p)
   :
   EDAnalyzer(p)  // ,
  // More initializers here.
-{}
+{
+  
+  std::string dbname = p.get<std::string>("DatabaseName","output_supera.mdb");
+  
+  // open the database
+  mdb_env_create(&mdb_env_);
+  mdb_env_set_mapsize(mdb_env_, LMDB_MAP_SIZE);
+  
+
+}
 
 void Supera::analyze(art::Event const & e)
 {
