@@ -1,4 +1,4 @@
-# Supera 
+# Supera : Slices off the meat from the art roast
 
 To use this:
 * clone repo into uboonecode/uboone/
