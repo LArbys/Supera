@@ -22,6 +22,7 @@
 
 #include "db_lmdb.h"
 #include "caffe.pb.h"
+#include <cstring>
 
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
@@ -63,8 +64,10 @@ Supera::Supera(fhicl::ParameterSet const & p)
   std::string dbname = p.get<std::string>("DatabaseName","output_supera.mdb");
   
   // open the database
+  std::cout << "[Supera] Make Database: " << dbname << std::endl;
   lmdb_ = new db::LMDB();
   lmdb_->Open( dbname, db::NEW );
+  std::cout << "[Supera] Create transaction. " << std::endl;
   txn_ = lmdb_->NewTransaction();
   nfills_before_write = 0;
 
@@ -72,10 +75,8 @@ Supera::Supera(fhicl::ParameterSet const & p)
 
 void Supera::analyze(art::Event const & e)
 {
-  // geometry service
-  art::ServiceHandle<geo::Geometry> geo;
-
   // Implementation of required member function here.
+  std::cout << "[Supera] Load RawDigits Handle" << std::endl;
   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
   e.getByLabel("daq", digitVecHandle);
 
@@ -84,17 +85,18 @@ void Supera::analyze(art::Event const & e)
     return;
   }
 
-  // Use the handle to get a particular (0th) element of collection.
-  art::Ptr<raw::RawDigit> digitVec0(digitVecHandle, 0);
+  // geometry service
+  std::cout << "[Supera] Load Geometry Service" << std::endl;
+  art::ServiceHandle<geo::Geometry> geom;
 
-  // data size
-  //unsigned int nticks = digitVec0->Samples(); //size of raw data vectors
-  //unsigned int nwfms  = digitVecHandle->size();
+  // // data size
   const unsigned int nticks = 4800; // 2.4 ms at 2 MHz
-  const unsigned int first_tick = 3200; // 1.6 ms from start of tpc acquisition
   const unsigned int nwfms = 3456;  // collection plane size
+  const unsigned int first_tick = 3200; // 1.6 ms from start of tpc acquisition
   const unsigned int first_col_wire = digitVecHandle->size() - nwfms; // a guess: fix this using geo service
-  //float image[nticks][nwfms];
+  float* image = new float[nticks*nwfms];
+  memset( image, 0, sizeof(float)*(nticks*nwfms) );
+  std::cout << "[Supera] image array ready " << image[0] << std::endl;
 
   // Caffe Protobuf object which we will serialize and store
   caffe::Datum data;
@@ -104,27 +106,40 @@ void Supera::analyze(art::Event const & e)
   data.set_label( 0 );             // set label: how is this done?
 
   // loop over all wires
+  std::cout << "[Supera] Store ADCs " << std::endl;
   for(size_t rdIter = 0; rdIter < digitVecHandle->size(); ++rdIter){
     art::Ptr<raw::RawDigit> digitVec(digitVecHandle, rdIter);
-    geo::View_t view = geo->View( digitVec->Channel() );
+    geo::View_t view = geom->View( digitVec->Channel() );
     if ( view==geo::kZ ) {
       // select collection plane
       int idx_ch = digitVec->Channel()-first_col_wire;
       if ( idx_ch<0 || idx_ch>=(int)nwfms )
-	continue; // out of range, skip
+  	continue; // out of range, skip
       for (unsigned int t=first_tick; t<first_tick+nticks; t++) {
-	int index = nwfms*(t-first_tick) + idx_ch; // row major
-	data.set_float_data( index, (float)digitVec->ADC(t) );
+  	//int index = nwfms*(t-first_tick) + idx_ch; // row major
+  	//data.set_float_data( index, (float)digitVec->ADC(t) );
+	int idx_t = t-first_tick;
+  	image[idx_t*nwfms + idx_ch] = (float)digitVec->ADC(t);
       }
     }	
   }
   
+  // copy into Datum
+  std::cout << "[Supera] Copy into protobuf " << std::endl;
+  for (unsigned int t=0; t<nticks; t++) {
+    for (unsigned int ch=0; ch<nwfms; ch++) {
+      data.add_float_data( image[t*nwfms+ch] );
+    }
+  }
+  
   // now serialize and store
+  std::cout << "[Supera] Serialize " << std::endl;
   std::string out;
   data.SerializeToString(&out);
   char eventid[100];
   sprintf( eventid, "run%06d_subrun%04d_event%06d", e.run(), e.subRun(), e.event() );
   std::string key_str = eventid;
+  std::cout << "[Supera] Store in DB " << std::endl;
   txn_->Put(key_str, out);
   nfills_before_write++;
   if ( nfills_before_write==100 ) {
@@ -132,6 +147,8 @@ void Supera::analyze(art::Event const & e)
     delete txn_;
     txn_ = lmdb_->NewTransaction();
   }
+
+  delete [] image;
 }
 
 

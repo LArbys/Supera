@@ -11,16 +11,15 @@ void LMDB::Open(const std::string& source, Mode mode) {
   mdb_env_create(&mdb_env_);
   mdb_env_set_mapsize(mdb_env_, LMDB_MAP_SIZE);
   if (mode == NEW) {
-    if ( mkdir(source.c_str(), 0744)==0 )
-      std::cout << "mkdir " << source << "failed";
+    if ( mkdir(source.c_str(), 0744)!=0 )
+      std::cout << "[LMDB] mkdir " << source << "failed" << std::endl;
     //CHECK_EQ(mkdir(source.c_str(), 0744), 0) << "mkdir " << source << "failed";
   }
   int flags = 0;
   if (mode == READ) {
     flags = MDB_RDONLY | MDB_NOTLS;
   }
-  //int rc = mdb_env_open(mdb_env_, source.c_str(), flags, 0664);
-  mdb_env_open(mdb_env_, source.c_str(), flags, 0664);
+  int rc = mdb_env_open(mdb_env_, source.c_str(), flags, 0664);
 #ifndef ALLOW_LMDB_NOLOCK
   //MDB_CHECK(rc);
 #else
@@ -36,7 +35,7 @@ void LMDB::Open(const std::string& source, Mode mode) {
     //MDB_CHECK(rc);
   }
 #endif
-  std::cout << "Opened lmdb " << source;
+  std::cout << "[LMDB] Opened database (status=" << rc << " " << mdb_strerror(rc) << ") " << source << std::endl;
 }
 
 LMDBCursor* LMDB::NewCursor() {
