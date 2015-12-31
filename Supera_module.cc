@@ -17,6 +17,7 @@
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
+#include "Geometry/Geometry.h"
 #include "RawData/RawDigit.h"
 
 #include "db_lmdb.h"
@@ -41,12 +42,15 @@ public:
   // Required functions.
   void analyze(art::Event const & e) override;
 
+  virtual void endJob();
 
 private:
 
   // Declare member data here.
-  MDB_env *mdb_env_;
-  MDB_txn *mdb_txn_;
+  db::LMDB* lmdb_;
+  db::Transaction* txn_;
+  int nfills_before_write;
+
 };
 
 
@@ -59,15 +63,81 @@ Supera::Supera(fhicl::ParameterSet const & p)
   std::string dbname = p.get<std::string>("DatabaseName","output_supera.mdb");
   
   // open the database
-  mdb_env_create(&mdb_env_);
-  mdb_env_set_mapsize(mdb_env_, LMDB_MAP_SIZE);
-  
+  lmdb_ = new db::LMDB();
+  lmdb_->Open( dbname, db::NEW );
+  txn_ = lmdb_->NewTransaction();
+  nfills_before_write = 0;
 
 }
 
 void Supera::analyze(art::Event const & e)
 {
+  // geometry service
+  art::ServiceHandle<geo::Geometry> geo;
+
   // Implementation of required member function here.
+  art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
+  e.getByLabel("daq", digitVecHandle);
+
+  if ( !digitVecHandle.isValid() ) {
+    std::cout << "Missing daq info. skipping." << std::endl;
+    return;
+  }
+
+  // Use the handle to get a particular (0th) element of collection.
+  art::Ptr<raw::RawDigit> digitVec0(digitVecHandle, 0);
+
+  // data size
+  //unsigned int nticks = digitVec0->Samples(); //size of raw data vectors
+  //unsigned int nwfms  = digitVecHandle->size();
+  const unsigned int nticks = 4800; // 2.4 ms at 2 MHz
+  const unsigned int first_tick = 3200; // 1.6 ms from start of tpc acquisition
+  const unsigned int nwfms = 3456;  // collection plane size
+  const unsigned int first_col_wire = digitVecHandle->size() - nwfms; // a guess: fix this using geo service
+  //float image[nticks][nwfms];
+
+  // Caffe Protobuf object which we will serialize and store
+  caffe::Datum data;
+  data.set_channels( 1 );          // number of planes (only collection for now)
+  data.set_height( (int)nticks );  // number of ticks
+  data.set_width( (int)nwfms );    // number of wires
+  data.set_label( 0 );             // set label: how is this done?
+
+  // loop over all wires
+  for(size_t rdIter = 0; rdIter < digitVecHandle->size(); ++rdIter){
+    art::Ptr<raw::RawDigit> digitVec(digitVecHandle, rdIter);
+    geo::View_t view = geo->View( digitVec->Channel() );
+    if ( view==geo::kZ ) {
+      // select collection plane
+      int idx_ch = digitVec->Channel()-first_col_wire;
+      if ( idx_ch<0 || idx_ch>=(int)nwfms )
+	continue; // out of range, skip
+      for (unsigned int t=first_tick; t<first_tick+nticks; t++) {
+	int index = nwfms*(t-first_tick) + idx_ch; // row major
+	data.set_float_data( index, (float)digitVec->ADC(t) );
+      }
+    }	
+  }
+  
+  // now serialize and store
+  std::string out;
+  data.SerializeToString(&out);
+  char eventid[100];
+  sprintf( eventid, "run%06d_subrun%04d_event%06d", e.run(), e.subRun(), e.event() );
+  std::string key_str = eventid;
+  txn_->Put(key_str, out);
+  nfills_before_write++;
+  if ( nfills_before_write==100 ) {
+    txn_->Commit();
+    delete txn_;
+    txn_ = lmdb_->NewTransaction();
+  }
 }
+
+
+void Supera::endJob() {
+  txn_->Commit();
+}
+
 
 DEFINE_ART_MODULE(Supera)
