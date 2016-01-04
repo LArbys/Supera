@@ -62,27 +62,29 @@ namespace larcaffe {
       ::caffe::Datum _data;
 
     };
+
+    template<> void converter_base::copy_data<float>(const unsigned int,
+						     const std::vector<float>&,
+						     const unsigned int,
+						     const unsigned int,
+						     const unsigned int,
+						     const unsigned int);
+    template<> void converter_base::copy_data<short>(const unsigned int,
+						     const std::vector<short>&,
+						     const unsigned int,
+						     const unsigned int,
+						     const unsigned int,
+						     const unsigned int);
+    template<> void converter_base::copy_data<unsigned short>(const unsigned int,
+							      const std::vector<unsigned short>&,
+							      const unsigned int,
+							      const unsigned int,
+							      const unsigned int,
+							      const unsigned int);
+    
   }
 }
 
-template<> void larcaffe::supera::converter_base::copy_data<float>(const unsigned int,
-								   const std::vector<float>&,
-								   const unsigned int,
-								   const unsigned int,
-								   const unsigned int,
-								   const unsigned int);
-template<> void larcaffe::supera::converter_base::copy_data<short>(const unsigned int,
-								   const std::vector<short>&,
-								   const unsigned int,
-								   const unsigned int,
-								   const unsigned int,
-								   const unsigned int);
-template<> void larcaffe::supera::converter_base::copy_data<unsigned short>(const unsigned int,
-									    const std::vector<unsigned short>&,
-									    const unsigned int,
-									    const unsigned int,
-									    const unsigned int,
-									    const unsigned int);
 
 #endif
 /** @} */ // end of doxygen group 

@@ -71,22 +71,24 @@ if [[ -z $PROTOBUF_LIBDIR ]]; then
     error=1;
 fi
 
-case `uname -n` in
-    (uboonegpvm*)
+if [ $error -eq 1 ]; then
+    case `uname -n` in
+	(uboonegpvm*)
 	printf "\033[95mrecovery\033[00m ... lucky you we can use local build by tmw...\n";
 	export PROTOBUF_INCDIR=/uboone/app/users/tmw/projects/supera/protobuf/include
 	export PROTOBUF_LIBDIR=/uboone/app/users/tmw/projects/supera/protobuf/lib
-	export LMDB_INCDIR=""
+	export LMDB_INCDIR=/uboone/app/users/tmw/projects/supera/lmdb/libraries/liblmdb
 	export LMDB_LIBDIR=/uboone/app/users/tmw/projects/supera/lmdb/libraries/liblmdb
-    ;;
-esac
-
-if [ $error -eq 1 ]; then
-    unset SUPERA_BASEDIR;
-    unset SUPERA_LIBDIR;
-    unset SUPERA_BUILDDIR;
-    unset SUPERA_ROOT6;
-    return 1;
+	error=0;
+	;;
+	(*)
+	unset SUPERA_BASEDIR;
+	unset SUPERA_LIBDIR;
+	unset SUPERA_BUILDDIR;
+	unset SUPERA_ROOT6;
+	return 1;
+	;;
+    esac
 fi
 
 echo
@@ -94,11 +96,11 @@ printf "\033[95mSUPERA_BASEDIR\033[00m  = $SUPERA_BASEDIR\n"
 printf "\033[95mSUPERA_BUILDDIR\033[00m = $SUPERA_BUILDDIR\n"
 printf "\033[95mSUPERA_LIBDIR\033[00m   = $SUPERA_LIBDIR\n"
 
-mkdir -p $SUPERA_BUILDDIR
+mkdir -p $SUPERA_BUILDDIR;
 
 export LD_LIBRARY_PATH=$SUPERA_LIBDIR:$LD_LIBRARY_PATH
 
-if [ $LARLITE_OS = 'Darwin' ]; then
+if [ $LARLITE_OS -e 'Darwin' ]; then
     export DYLD_LIBRARY_PATH=$SUPERA_LIBDIR:$DYLD_LIBRARY_PATH
 fi
 

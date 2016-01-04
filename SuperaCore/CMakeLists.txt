@@ -2,7 +2,7 @@ string(ASCII 27 Esc)
 set(ColorReset "${Esc}[m")
 set(Yellow      "${Esc}[33m")
 
-cmake_minimum_required (VERSION 2.8)
+#cmake_minimum_required (VERSION 2.8)
 project (SuperaCore)
 
 # Now set CMAKE variables for my use
@@ -45,7 +45,7 @@ execute_process(COMMAND rootcling
 		-s   ${SUPERA_LIBDIR}/${SHLIB}
 		-rml ${SHLIB}
 		-rmf ${SUPERA_LIBDIR}/libSuperaCore.rootmap
-		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${HEADERS} LinkDef.h)
+		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${HEADERS} LinkDef.h)
 
 # Set include dirs
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
