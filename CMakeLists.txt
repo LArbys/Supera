@@ -1,69 +1,34 @@
-# find_ups_product is meant to be called from the top CMakeLists.txt file
+cmake_minimum_required (VERSION 2.8)
 
-set( PROTOBUF_INC $ENV{PROTOBUF_HOME}/include )
-set( PROTOBUF_LIB $ENV{PROTOBUF_HOME}/lib/libprotobuf.so )
-set( LMDB_INC $ENV{LMDB_HOME} )
-set( LMDB_LIB $ENV{LMDB_HOME}/liblmdb.so )
+string(ASCII 27 Esc)
+set(ColorReset "${Esc}[m")
+set(Yellow      "${Esc}[33m")
 
-include_directories( ${PROTOBUF_INC} ${LMDB_INC} )
+#
+# Some useful variables
+#
+execute_process(COMMAND root-config --incdir OUTPUT_VARIABLE ROOT_INCDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND root-config --libs OUTPUT_VARIABLE ROOT_LIB OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-art_make( BASENAME_ONLY
-	  LIBRARY_NAME  uboone_Supera
-	  EXCLUDE Supera_module.cc
-	  LIB_LIBRARIES
-			OpticalDetector
-                        ${ROOT_BASIC_LIB_LIST}
-			${PROTOBUF_LIB}
-			${LMDB_LIB}
-	  MODULE_LIBRARIES Geometry
-	  	        Geometry_service
-                        RawData
-                        ${ART_FRAMEWORK_CORE}
-			${ART_FRAMEWORK_IO_SOURCES}
-                        ${ART_FRAMEWORK_PRINCIPAL}
-                        ${ART_FRAMEWORK_SERVICES_REGISTRY}
-                        ${ART_FRAMEWORK_SERVICES_OPTIONAL}
-                        ${ART_FRAMEWORK_SERVICES_OPTIONAL_TFILESERVICE_SERVICE}
-                        ${ART_PERSISTENCY_COMMON}
-                        ${ART_PERSISTENCY_PROVENANCE}
-                        ${ART_UTILITIES}
-                        ${MF_MESSAGELOGGER}
-                        ${MF_UTILITIES}
-                        ${FHICLCPP}
-                        ${CETLIB}
-                        ${ROOT_GEOM}
-                        ${ROOT_XMLIO}
-                        ${ROOT_GDML}
-                        ${ROOT_BASIC_LIB_LIST}
-			${SIMULATIONBASE}
-        )							   
+#
+# Set external dependency flags
+#
+set(LMDB_INCDIR $ENV{LMDB_INCDIR})
+set(LMDB_LDFLAGS "-L$ENV{LMDB_LIBDIR} -llmdb")
 
-simple_plugin( Supera "module"
-	       RawData
-	       RecoBase
-	       Geometry
-	       Geometry_service
-	       Utilities
-	       uboone_Supera
-               ${ART_FRAMEWORK_CORE}
-	       ${ART_FRAMEWORK_IO_SOURCES}
-               ${ART_FRAMEWORK_PRINCIPAL}
-               ${ART_FRAMEWORK_SERVICES_REGISTRY}
-               ${ART_FRAMEWORK_SERVICES_OPTIONAL}
-               ${ART_FRAMEWORK_SERVICES_OPTIONAL_TFILESERVICE_SERVICE}
-               ${ART_PERSISTENCY_COMMON}
-               ${ART_PERSISTENCY_PROVENANCE}
-               ${ART_UTILITIES}
-	       ${ROOT_BASIC_LIB_LIST}
-	       ${PROTOBUF_LIB}
-	       ${LMDB_LIB}
-               BASENAME_ONLY
-             )
+set(PROTOBUF_INCDIR $ENV{PROTOBUF_INCDIR})
+set(PROTOBUF_LDFLAGS "-L$ENV{PROTOBUF_LIBDIR} -lprotobuf")
 
+set(USE_ROOT6 $ENV{SUPERA_ROOT6})
 
-install_headers()
-install_source()
+#
+# Set directories
+#
+set( SUPERA_INCDIR ${CMAKE_SOURCE_DIR}               )
+set( SUPERA_LIBDIR $ENV{SUPERA_LIBDIR}               )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${SUPERA_LIBDIR} )
+execute_process(COMMAND mkdir -p ${SUPERA_LIBDIR}    )
 
-install_fhicl()
-FILE(GLOB fcl_files *.fcl)
-install_source( EXTRAS ${fcl_files} )
+Project (FakeSupera)
+add_subdirectory(SuperaCore)
+add_subdirectory(LLSupera)
