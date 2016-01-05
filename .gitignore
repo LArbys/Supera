@@ -9,3 +9,6 @@
 *.txt
 *.bin
 build
+SuperaCore/caffe.pb.h
+SuperaCore/caffe.pb.cc
+SuperaCore/caffe.pb.cxx
