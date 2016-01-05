@@ -59,7 +59,6 @@ if [[ -z `command -v protoc` ]]; then
     error=1;
 fi
 
-
 if [ $error -eq 1 ]; then
     case `uname -n` in
 	(uboonegpvm*)
@@ -102,6 +101,15 @@ export LD_LIBRARY_PATH=$SUPERA_LIBDIR:$LD_LIBRARY_PATH
 
 if [ $LARLITE_OS -e 'Darwin' ]; then
     export DYLD_LIBRARY_PATH=$SUPERA_LIBDIR:$DYLD_LIBRARY_PATH
+fi
+
+#if [ $MRB_TOP ]; then
+if [ -d $MRB_TOP/srcs/uboonecode/uboone ]; then
+    echo Found local uboonecode @ \$MRB_TOP=${MRB_TOP}
+    if [ ! -d $MRB_TOP/srcs/uboonecode/uboone/Supera ]; then
+	echo Making a sym-link for LArSoft API...
+	ln -s $SUPERA_BASEDIR/APILArSoft $MRB_TOP/srcs/uboonecode/uboone/Supera
+    fi
 fi
 
 echo
