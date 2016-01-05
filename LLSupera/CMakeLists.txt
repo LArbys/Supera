@@ -27,12 +27,19 @@ list( GET LINKDEF 0 LINKDEF )
 list( REMOVE_ITEM HEADERS ${LINKDEF} )
 
 # Pre process to generate dictionary source code + getting compiler/linker flags
+IF(${USE_ROOT6})
 execute_process(COMMAND rootcling
 		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
 		-s   ${SUPERA_LIBDIR}/${SHLIB}
 		-rml ${SHLIB}
 		-rmf ${SUPERA_LIBDIR}/libLLSupera.rootmap
-		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${HEADERS} LinkDef.h)
+		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${HEADERS} ${LINKDEF})
+ELSE()
+execute_process(COMMAND rootcint
+                -f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
+                -c -I${ROOT_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
+                -p  ${HEADERS} ${LINKDEF})
+ENDIF()
 
 # Set include dirs
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -56,7 +63,15 @@ if (APPLE)
    set_property(TARGET LLSupera PROPERTY SUFFIX "")
 endif()
 
-
 # Generate a rootmap file
-set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_SOURCE_DIR}/lib/libLLSupera.rootmap" )
+if(NOT ${USE_ROOT6})
+add_custom_command( TARGET LLSupera
+                    POST_BUILD
+                    COMMAND rlibmap ARGS -f
+                    -o ${SUPERA_LIBDIR}/libLLSupera.rootmap
+                    -l ${SUPERA_LIBDIR}/lib/libLLSupera.so
+                    -c ${CMAKE_CURRENT_SOURCE_DIR}/LinkDef.h)
+endif()
+
+set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${SUPERA_LIBDIR}/libLLSupera.rootmap" )
 

@@ -73,6 +73,7 @@ namespace larcaffe {
       /// Getter of a message instance 
       static logger& get(const std::string name)
       {
+	if(!_logger_m) _logger_m = new std::map<std::string,larcaffe::supera::logger>();
 	auto iter = _logger_m->find(name);
 	if(iter == _logger_m->end())
 	  iter = _logger_m->emplace(name,logger(name)).first;

@@ -15,8 +15,15 @@
 #define __SUPERA_CONVERTER_BASE_H__
 
 #include <iostream>
-#include "caffe.pb.h"
 #include "supera_base.h"
+
+namespace caffe {
+  class Datum;
+}
+
+#ifndef __CINT__
+#include "caffe.pb.h"
+#endif
 
 namespace larcaffe {
 
@@ -75,13 +82,14 @@ namespace larcaffe {
 						     const unsigned int,
 						     const unsigned int,
 						     const unsigned int);
+    /*
     template<> void converter_base::copy_data<unsigned short>(const unsigned int,
 							      const std::vector<unsigned short>&,
 							      const unsigned int,
 							      const unsigned int,
 							      const unsigned int,
 							      const unsigned int);
-    
+    */    
   }
 }
 

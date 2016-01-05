@@ -37,25 +37,25 @@ fi
 # Check LMDB
 error=0
 if [[ -z $LMDB_INCDIR ]]; then
-    printf "\033[91merror\033[00m ... \$LMDB_INCDIR must be set for lmdb headers.\n";
+    printf "\033[95mwarning\033[00m ... \$LMDB_INCDIR must be set for lmdb headers.\n";
     error=1;
 fi
 if [[ -z $LMDB_LIBDIR ]]; then
-    printf "\033[91merror\033[00m ... \$LMDB_LIBDIR must be set for lmdb libraries.\n";
+    printf "\033[95mwarning\033[00m ... \$LMDB_LIBDIR must be set for lmdb libraries.\n";
     error=1;
 fi
 
 # Check protobuf
 if [[ -z $PROTOBUF_INCDIR ]]; then
-    printf "\033[91merror\033[00m ... \$PROTOBUF_INCDIR must be set for protobuf headers.\n";
+    printf "\033[95mwarning\033[00m ... \$PROTOBUF_INCDIR must be set for protobuf headers.\n";
     error=1;
 fi
 if [[ -z $PROTOBUF_LIBDIR ]]; then
-    printf "\033[91merror\033[00m ... \$PROTOBUF_LIBDIR must be set for protobuf libraries.\n";
+    printf "\033[95mwarning\033[00m ... \$PROTOBUF_LIBDIR must be set for protobuf libraries.\n";
     error=1;
 fi
 if [[ -z `command -v protoc` ]]; then
-    printf "\033[91merror\033[00m ... protoc (protobuf compiler) is not available. (needed to generate protobuf header.\n";
+    printf "\033[95mwarning\033[00m ... protoc (protobuf compiler) is not available. (needed to generate protobuf header.\n";
     error=1;
 fi
 
@@ -63,14 +63,16 @@ fi
 if [ $error -eq 1 ]; then
     case `uname -n` in
 	(uboonegpvm*)
-	printf "\033[95mrecovery\033[00m ... lucky you we can use local build by tmw...\n";
+	printf "\033[93mrecovery\033[00m ... lucky you we can use local build by tmw...\n";
 	export PROTOBUF_INCDIR=/uboone/app/users/tmw/projects/supera/protobuf/include
 	export PROTOBUF_LIBDIR=/uboone/app/users/tmw/projects/supera/protobuf/lib
 	export LMDB_INCDIR=/uboone/app/users/tmw/projects/supera/lmdb/libraries/liblmdb
 	export LMDB_LIBDIR=/uboone/app/users/tmw/projects/supera/lmdb/libraries/liblmdb
+	export PATH=$PATH:/uboone/app/users/tmw/projects/supera/protobuf/bin
 	error=0;
 	;;
 	(*)
+	printf "\033[91merror\033[00m ... aborting configuration.\n";
 	unset SUPERA_BASEDIR;
 	unset SUPERA_LIBDIR;
 	unset SUPERA_BUILDDIR;
@@ -85,6 +87,9 @@ printf "\033[95mSUPERA_BASEDIR\033[00m  = $SUPERA_BASEDIR\n"
 printf "\033[95mSUPERA_BUILDDIR\033[00m = $SUPERA_BUILDDIR\n"
 printf "\033[95mSUPERA_LIBDIR\033[00m   = $SUPERA_LIBDIR\n"
 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$SUPERA_LIBDIR;
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$SUPERA_LIBDIR;
+
 mkdir -p $SUPERA_BUILDDIR;
 
 if [ ! -f $SUPERA_BASEDIR/SuperaCore/caffe.pb.h ]; then
@@ -95,7 +100,7 @@ fi
 
 export LD_LIBRARY_PATH=$SUPERA_LIBDIR:$LD_LIBRARY_PATH
 
-if [ $LARLITE_OS == 'Darwin' ]; then
+if [ $LARLITE_OS -e 'Darwin' ]; then
     export DYLD_LIBRARY_PATH=$SUPERA_LIBDIR:$DYLD_LIBRARY_PATH
 fi
 

@@ -40,7 +40,7 @@ list( GET  DB_LMDB 0 DB_LMDB )
 list( REMOVE_ITEM HEADERS ${DB_LMDB} )
 
 # Pre process to generate dictionary source code + getting compiler/linker flags
-IF($ENV{SUPERA_ROOT6})
+IF(${USE_ROOT6})
 execute_process(COMMAND rootcling
 		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
 		-s   ${SUPERA_LIBDIR}/${SHLIB}
@@ -48,12 +48,12 @@ execute_process(COMMAND rootcling
 		-rmf ${SUPERA_LIBDIR}/libSuperaCore.rootmap
 		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
 		${HEADERS} ${LINKDEF})
-ELSE($ENV{SUPERA_ROOT6})
-execute_process(COMMAND rootcint -f
-			${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
-			-c -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I{LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
-			-p  ${HEADERS} ${LINKDEF})
-ENDIF($ENV{SUPERA_ROOT6})
+ELSE()
+execute_process(COMMAND rootcint
+		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
+		-c -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
+		-p  ${HEADERS} ${LINKDEF})
+ENDIF()
 
 # Set include dirs
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -79,15 +79,14 @@ endif()
 
 
 # Generate a rootmap file
-# Generate a rootmap file
-add_custom_command( TARGET UBOnlineDBI
+IF(NOT ${USE_ROOT6}) 
+add_custom_command( TARGET SuperaCore
 		    POST_BUILD
 		    COMMAND rlibmap ARGS -f
-		    -o ${CMAKE_CURRENT_SOURCE_DIR}/lib/libSuperaCore.rootmap
-		    -l ${CMAKE_CURRENT_SOURCE_DIR}/lib/libSuperaCore.so
+		    -o ${SUPERA_LIBDIR}/libSuperaCore.rootmap
+		    -l ${SUPERA_LIBDIR}/libSuperaCore.so
 		    -c ${CMAKE_CURRENT_SOURCE_DIR}/LinkDef.h
 )
-
-IF(!$ENV{SUPERA_ROOT6})
+ENDIF()
 set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_SOURCE_DIR}/lib/libSuperaCore.rootmap" )
-ENDIF(!$ENV{SUPERA_ROOT6})
+

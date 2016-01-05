@@ -13,6 +13,7 @@
 #pragma link C++ namespace larcaffe::supera+;
 #pragma link C++ class larcaffe::supera::logger+;
 #pragma link C++ class larcaffe::supera::supera_base+;
+#pragma link C++ class larcaffe::supera::converter_base+;
 #pragma link C++ class larcaffe::supera::lmdb_converter+;
 //ADD_NEW_CLASS ... do not change this line
 #endif

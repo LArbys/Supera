@@ -15,9 +15,17 @@
 #define SUPERA_LMDB_CONVERTER_H
 
 #include <iostream>
+#include "converter_base.h"
+
+namespace db {
+  class LMDB;
+  class Transaction;
+}
+
+#ifndef __CINT__
 #include "db_lmdb.h"
 #include "caffe.pb.h"
-#include "converter_base.h"
+#endif
 
 namespace larcaffe {
 
@@ -54,6 +62,7 @@ namespace larcaffe {
       db::LMDB *_lmdb;
       db::Transaction *_txn;
       std::string _dbname,_event_key;
+
     };
   }
 }
