@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 2.8)
 
 string(ASCII 27 Esc)
 set(ColorReset "${Esc}[m")
@@ -32,3 +32,5 @@ execute_process(COMMAND mkdir -p ${SUPERA_LIBDIR}    )
 Project (FakeSupera)
 add_subdirectory(SuperaCore)
 add_subdirectory(LLSupera)
+
+
