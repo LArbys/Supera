@@ -10,7 +10,7 @@
 namespace larcaffe {
 
   Cropper::Cropper() {
-    minpadding_t = 50;
+    minpadding_t = 100;
     minpadding_w = 10;
     targetwidth = 247;
     targetheight = 247;
@@ -34,7 +34,7 @@ namespace larcaffe {
 
     int wire_max = 0;
     int wire_min = 10000;
-    const double cm_per_us = 0.11; // for 300 V/cm
+    const double cm_per_us = 0.115; // for 300 V/cm
     double earliest_t = 1e10;
     double earliest_t_atwire = 1e10;
     double latest_t_atwire = 0;
@@ -159,7 +159,27 @@ namespace larcaffe {
 	}
       }
       
+      // now we SUM POOL
+      std::cout << "[Cropper] Compress by factor of (" << nheights << "," << nwidths << ")" << std::endl;
+      image.compressed_collection.setSize( targetheight, targetwidth );
+      // we first compress in t, then in w
+      for (int t1=0; t1<targetheight; t1++) {
+	for (int w1=0; w1<targetwidth; w1++) {
+	  // sum the little area
+	  float sum = 0.0;
+	  for (int nh=0; nh<nheights; nh++) {
+	    for (int nw=0; nw<nwidths; nw++) {
+	      sum += image.precompressed_collection.pixel( t1*nheights+nh, w1*nwidths+nw );
+	    }
+	  }
+	  image.compressed_collection.setpixel( t1, w1, sum );
+	  // end of summing loop
+	}
+      }
+
+      // Hand it over
       output.emplace_back( image );
+
     }// if crop found
     else {
       std::cout << "[Cropper] No charged tracks through active voluem." << std::endl;

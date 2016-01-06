@@ -54,7 +54,7 @@ namespace larcaffe {
     //   delete [] fPixels[h];
     // delete [] fPixels;
     // fPixels = NULL;
-    // std::cout << "[Image (" << this << ")] Cleared image memory " << std::endl;
+    std::cout << "[Image (" << this << ")] Cleared image memory " << std::endl;
   }
 
   void Image::alloc( int height, int width ) {
