@@ -1,9 +1,7 @@
 #include "RawDigitsToImageI.h"
 #include <iostream>
 
-#include "art/Framework/Services/Registry/ServiceHandle.h" // for the convenience of includers
-// #include "messagefacility/MessageLogger/MessageLogger.h"
-//#include "Geometry/Geometry.h" // include this and disaster happens
+#include "Geometry/Geometry.h" // include this and disaster happens
 
 #include "RawData/RawDigit.h"
 
@@ -17,7 +15,7 @@ namespace larcaffe {
 
     std::cout << "[RawDigitsToImage] Store ADCs " << std::endl;
 
-    //art::ServiceHandle<geo::Geometry> geom;
+    art::ServiceHandle<geo::Geometry> geom;
   
     // //Image aimage();
     bool setsize = false;
@@ -27,9 +25,9 @@ namespace larcaffe {
     int nadcs = 0;
     for(size_t rdIter = 0; rdIter < digitVec.size(); ++rdIter){
       const raw::RawDigit& digits = digitVec.at( rdIter );
-      //geo::View_t view = geom->View( digits.Channel() );
-      //if ( view==geo::kZ ) {
-      if ( true ) {
+      geo::View_t view = geom->View( digits.Channel() );
+      if ( view==geo::kZ ) {
+      //if ( true ) {
     	// select collection plane
     	int idx_ch = digits.Channel()-chstart;
     	if ( idx_ch<0 || idx_ch>=nwfms )

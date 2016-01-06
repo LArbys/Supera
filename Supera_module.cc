@@ -111,42 +111,45 @@ void Supera::analyze(art::Event const & e)
   converter.convert( *digitVecHandle, first_col_wire, first_col_wire+nwfms, image );
 
 
-  std::vector< larcaffe::Image > cropped_images;
+  std::vector< larcaffe::MCImage > cropped_images;
   cropper.crop( *mctrackHandle, image, cropped_images );
 
   // Caffe Protobuf object which we will serialize and store
-  caffe::Datum data;
-  data.set_channels( 1 );          // number of planes (only collection for now)
-  data.set_height( (int)image.height() );  // number of ticks
-  data.set_width( (int)image.width() );    // number of wires
-  data.set_label( 0 );             // set label: how is this done?  
+  for (int img=0; img<(int)cropped_images.size(); img++) {
+    caffe::Datum data;
+    larcaffe::Image* cropped = cropped_images.at(img).precompressed_collection;
+    data.set_channels( 1 );          // number of planes (only collection for now)
+    data.set_height( (int)(*cropped).height() );  // number of ticks
+    data.set_width(  (int)(*cropped).width() );    // number of wires
+    data.set_label( 0 );             // set label: how is this done?  
 
 
-  // copy into Datum
-  std::cout << "[Supera] Copy into protobuf " << std::endl;
-  for (int t=0; t<image.height(); t++) {
-    for (int ch=0; ch<image.width(); ch++) {
-      data.add_float_data( image.pixel(t,ch) );
+    // copy into Datum
+    std::cout << "[Supera] Copy into protobuf " << std::endl;
+    for (int t=0; t<cropped->height(); t++) {
+      for (int ch=0; ch<cropped->width(); ch++) {
+	data.add_float_data( cropped->pixel(t,ch) );
+      }
     }
-  }
+    
+    // now serialize and store
+    std::cout << "[Supera] Serialize " << std::endl;
+    std::string out;
+    data.SerializeToString(&out);
+    char eventid[200];
+    sprintf( eventid, "run%06d_subrun%04d_event%06d", e.run(), e.subRun(), e.event() );
+    std::string key_str = eventid;
+    std::cout << "[Supera] Store in DB " << std::endl;
+    txn_->Put(key_str, out);
+    nfills_before_write++;
+    if ( nfills_before_write==100 ) {
+      txn_->Commit();
+      delete txn_;
+      txn_ = lmdb_->NewTransaction();
+    }
+  }//for total number of crops
   
-  // now serialize and store
-  std::cout << "[Supera] Serialize " << std::endl;
-  std::string out;
-  data.SerializeToString(&out);
-  char eventid[100];
-  sprintf( eventid, "run%06d_subrun%04d_event%06d", e.run(), e.subRun(), e.event() );
-  std::string key_str = eventid;
-  std::cout << "[Supera] Store in DB " << std::endl;
-  txn_->Put(key_str, out);
-  nfills_before_write++;
-  if ( nfills_before_write==100 ) {
-    txn_->Commit();
-    delete txn_;
-    txn_ = lmdb_->NewTransaction();
-  }
-
-  //delete [] image;
+  std::cout << "[Supera] analyze end." << std::endl;
 }
 
 

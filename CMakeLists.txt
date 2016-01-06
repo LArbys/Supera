@@ -10,9 +10,11 @@ include_directories( ${PROTOBUF_INC} ${LMDB_INC} )
 art_make( BASENAME_ONLY
 	  LIBRARY_NAME  uboone_Supera
 	  EXCLUDE Supera_module.cc
-	  LIB_LIBRARIES OpticalDetector
-	  	        Geometry_service
-                        RawData
+	  LIB_LIBRARIES
+	  	     ${ART_FRAMEWORK_CORE}
+		     OpticalDetector
+		     Geometry
+           	     RawData
 			RecoBase
 			Utilities			
                         ${ART_FRAMEWORK_CORE}
@@ -34,6 +36,7 @@ art_make( BASENAME_ONLY
                         ${ROOT_BASIC_LIB_LIST}
 			${PROTOBUF_LIB}
 			${LMDB_LIB}
+			${Boost_SYSTEM_LIBRARY}
         )							   
 
 simple_plugin( Supera "module"

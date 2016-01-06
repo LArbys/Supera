@@ -17,7 +17,7 @@ namespace larcaffe {
     Cropper();
     virtual ~Cropper();
     
-    void crop( const std::vector< sim::MCTrack >& mctracks, const Image& rawadcimage, std::vector<MCImage>& output  );
+    void crop( const std::vector< sim::MCTrack >& mctracks, Image& rawadcimage, std::vector<MCImage>& output  );
 
     // config parameters
     int targetwidth;

@@ -28,6 +28,8 @@ namespace larcaffe {
       return;
     for (int h=0; h<fHeight; h++)
       delete [] fPixels[h];
+    delete [] fPixels;
+    fPixels = NULL;
   }
 
   void Image::alloc( int height, int width ) {
