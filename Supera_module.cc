@@ -111,6 +111,7 @@ void Supera::analyze(art::Event const & e)
   converter.convert( *digitVecHandle, first_col_wire, first_col_wire+nwfms, image );
 
 
+  std::cout << "[Supera] Call the cropper" << std::endl;
   std::vector< larcaffe::MCImage > cropped_images;
   cropper.crop( *mctrackHandle, image, cropped_images );
 
@@ -118,6 +119,7 @@ void Supera::analyze(art::Event const & e)
   for (int img=0; img<(int)cropped_images.size(); img++) {
     caffe::Datum data;
     larcaffe::Image& cropped = cropped_images.at(img).precompressed_collection;
+    std::cout << "[Supera] Processed cropped image " << &cropped << std::endl;
     data.set_channels( 1 );          // number of planes (only collection for now)
     data.set_height( (int)cropped.height() );  // number of ticks
     data.set_width(  (int)cropped.width() );    // number of wires

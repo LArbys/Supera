@@ -1,6 +1,8 @@
 #ifndef __Image__
 #define __Image__
 
+#include <vector>
+
 namespace larcaffe {
 
   class Image {
@@ -12,6 +14,9 @@ namespace larcaffe {
     Image( int height, int width );
     virtual ~Image();
 
+    //Image( Image& source ); // copy constructor 
+    //Image& operator=( Image& source ); // assignment operator
+
     void setSize( int height, int width );
     int height() { return fHeight; };
     int width() { return fWidth; };
@@ -22,7 +27,7 @@ namespace larcaffe {
   private:
     int fHeight;
     int fWidth;
-    float** fPixels;
+    std::vector<std::vector<float>> fPixels;
 
     void clear();
     void alloc(int height, int width );
