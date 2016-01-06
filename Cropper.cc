@@ -74,13 +74,13 @@ namespace larcaffe {
       image.mctrack_boundingbox[2][1] = (int)wire_max;
       image.mctrack_boundingbox[3][0] = 3200+4800;
       image.mctrack_boundingbox[3][1] = (int)wire_min;
-      image.precompressed_collection = new Image( 4800, (int)(wire_max-wire_min) );
+      image.precompressed_collection.setSize(4800, (int)(wire_max-wire_min) );
       
       // copy crop into new image
       for (int t=0; t<4800; t++) {
 	for (int w=0; w<int(wire_max-wire_min); w++ ) {
 	  double value = rawadcimage.pixel( int(3200+t), int(wire_min+w) );
-	  (*image.precompressed_collection).setpixel( t, w, value );
+	  image.precompressed_collection.setpixel( t, w, value );
 	}
       }
       

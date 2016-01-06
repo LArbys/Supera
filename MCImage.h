@@ -20,10 +20,10 @@ namespace larcaffe {
     double mctrack_boundingbox[4][2];    
 
     // using the bounding box, we clip out an image of the interaction
-    Image* precompressed_collection;
+    Image precompressed_collection;
 
     // we will then compress the image (using maxpooling) to bring the image down to a target size (e.g. 247x247)
-    Image* compressed_collection;
+    Image compressed_collection;
 
     // right now everything is the collection plane. need to add ability to add planes and such.
     // also need to think hard about framework and how this data type should look. but now just want experience of

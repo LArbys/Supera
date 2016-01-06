@@ -36,6 +36,7 @@ namespace larcaffe {
     fPixels = new float*[height];
     for (int h=0; h<height; h++)
       fPixels[h] = new float[width];
+    std::cout << "[Image] Allocated space for image H: " << height << " W: " << width << std::endl;
   }
 
   void Image::setpixel( int h, int w, float value ) {
