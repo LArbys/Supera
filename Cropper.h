@@ -22,7 +22,8 @@ namespace larcaffe {
     // config parameters
     int targetwidth;
     int targetheight;
-    int minpadding;
+    int minpadding_t;
+    int minpadding_w;
     
 
   };
