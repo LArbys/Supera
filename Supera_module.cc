@@ -19,10 +19,14 @@
 
 #include "Geometry/Geometry.h"
 #include "RawData/RawDigit.h"
+#include "MCBase/MCTrack.h"
 
 #include "db_lmdb.h"
 #include "caffe.pb.h"
 #include <cstring>
+
+#include "RawDigitsToImageI.h"
+#include "Cropper.h"
 
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
@@ -39,6 +43,8 @@ public:
   Supera(Supera &&) = delete;
   Supera & operator = (Supera const &) = delete;
   Supera & operator = (Supera &&) = delete;
+  larcaffe::RawDigitsToImageI converter;
+  larcaffe::Cropper cropper;
 
   // Required functions.
   void analyze(art::Event const & e) override;
@@ -80,6 +86,9 @@ void Supera::analyze(art::Event const & e)
   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
   e.getByLabel("daq", digitVecHandle);
 
+  art::Handle< std::vector<sim::MCTrack> > mctrackHandle;
+  e.getByLabel( "mcreco", mctrackHandle );
+
   if ( !digitVecHandle.isValid() ) {
     std::cout << "Missing daq info. skipping." << std::endl;
     return;
@@ -90,45 +99,34 @@ void Supera::analyze(art::Event const & e)
   art::ServiceHandle<geo::Geometry> geom;
 
   // // data size
-  const unsigned int nticks = 4800; // 2.4 ms at 2 MHz
+  //const unsigned int nticks = 4800; // 2.4 ms at 2 MHz
+  //const unsigned int first_tick = 3200; // 1.6 ms from start of tpc acquisition
   const unsigned int nwfms = 3456;  // collection plane size
-  const unsigned int first_tick = 3200; // 1.6 ms from start of tpc acquisition
   const unsigned int first_col_wire = digitVecHandle->size() - nwfms; // a guess: fix this using geo service
-  float* image = new float[nticks*nwfms];
-  memset( image, 0, sizeof(float)*(nticks*nwfms) );
-  std::cout << "[Supera] image array ready " << image[0] << std::endl;
+  //float* image = new float[nticks*nwfms];
+  //memset( image, 0, sizeof(float)*(nticks*nwfms) );
+  //std::cout << "[Supera] image array ready " << image[0] << std::endl;
+
+  larcaffe::Image image;
+  converter.convert( *digitVecHandle, first_col_wire, first_col_wire+nwfms, image );
+
+
+  std::vector< larcaffe::Image > cropped_images;
+  cropper.crop( *mctrackHandle, image, cropped_images );
 
   // Caffe Protobuf object which we will serialize and store
   caffe::Datum data;
   data.set_channels( 1 );          // number of planes (only collection for now)
-  data.set_height( (int)nticks );  // number of ticks
-  data.set_width( (int)nwfms );    // number of wires
-  data.set_label( 0 );             // set label: how is this done?
+  data.set_height( (int)image.height() );  // number of ticks
+  data.set_width( (int)image.width() );    // number of wires
+  data.set_label( 0 );             // set label: how is this done?  
 
-  // loop over all wires
-  std::cout << "[Supera] Store ADCs " << std::endl;
-  for(size_t rdIter = 0; rdIter < digitVecHandle->size(); ++rdIter){
-    art::Ptr<raw::RawDigit> digitVec(digitVecHandle, rdIter);
-    geo::View_t view = geom->View( digitVec->Channel() );
-    if ( view==geo::kZ ) {
-      // select collection plane
-      int idx_ch = digitVec->Channel()-first_col_wire;
-      if ( idx_ch<0 || idx_ch>=(int)nwfms )
-  	continue; // out of range, skip
-      for (unsigned int t=first_tick; t<first_tick+nticks; t++) {
-  	//int index = nwfms*(t-first_tick) + idx_ch; // row major
-  	//data.set_float_data( index, (float)digitVec->ADC(t) );
-	int idx_t = t-first_tick;
-  	image[idx_t*nwfms + idx_ch] = (float)digitVec->ADC(t);
-      }
-    }	
-  }
-  
+
   // copy into Datum
   std::cout << "[Supera] Copy into protobuf " << std::endl;
-  for (unsigned int t=0; t<nticks; t++) {
-    for (unsigned int ch=0; ch<nwfms; ch++) {
-      data.add_float_data( image[t*nwfms+ch] );
+  for (int t=0; t<image.height(); t++) {
+    for (int ch=0; ch<image.width(); ch++) {
+      data.add_float_data( image.pixel(t,ch) );
     }
   }
   
@@ -148,7 +146,7 @@ void Supera::analyze(art::Event const & e)
     txn_ = lmdb_->NewTransaction();
   }
 
-  delete [] image;
+  //delete [] image;
 }
 
 

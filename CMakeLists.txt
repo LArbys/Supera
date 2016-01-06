@@ -10,14 +10,11 @@ include_directories( ${PROTOBUF_INC} ${LMDB_INC} )
 art_make( BASENAME_ONLY
 	  LIBRARY_NAME  uboone_Supera
 	  EXCLUDE Supera_module.cc
-	  LIB_LIBRARIES
-			OpticalDetector
-                        ${ROOT_BASIC_LIB_LIST}
-			${PROTOBUF_LIB}
-			${LMDB_LIB}
-	  MODULE_LIBRARIES Geometry
+	  LIB_LIBRARIES OpticalDetector
 	  	        Geometry_service
                         RawData
+			RecoBase
+			Utilities			
                         ${ART_FRAMEWORK_CORE}
 			${ART_FRAMEWORK_IO_SOURCES}
                         ${ART_FRAMEWORK_PRINCIPAL}
@@ -35,16 +32,17 @@ art_make( BASENAME_ONLY
                         ${ROOT_XMLIO}
                         ${ROOT_GDML}
                         ${ROOT_BASIC_LIB_LIST}
-			${SIMULATIONBASE}
+			${PROTOBUF_LIB}
+			${LMDB_LIB}
         )							   
 
 simple_plugin( Supera "module"
+	       uboone_Supera
 	       RawData
 	       RecoBase
 	       Geometry
 	       Geometry_service
 	       Utilities
-	       uboone_Supera
                ${ART_FRAMEWORK_CORE}
 	       ${ART_FRAMEWORK_IO_SOURCES}
                ${ART_FRAMEWORK_PRINCIPAL}
