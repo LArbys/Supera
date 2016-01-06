@@ -127,7 +127,7 @@ namespace larcaffe {
       }
       else if ( wire_max>=3456 ) {
 	wire_max = 3455;
-	wire_min = wire_max = (wup+wdown);
+	wire_min = wire_max - (wup+wdown);
       }
       dwire = wire_max-wire_min;
       
@@ -135,8 +135,8 @@ namespace larcaffe {
       std::cout << "[Cropper] Number of mctracks: " << mctracks.size() << std::endl;
       std::cout << "[Cropper] bounding collection wires: [" << wire_min << ", " << wire_max << "]" << std::endl;
       std::cout << "[Cropper] bounding ticks: [" << tick_min << ", " << tick_max << "]" << std::endl;
-      std::cout << "[ENTER] to continue" << std::endl;
-      std::cin.get();
+      //std::cout << "[ENTER] to continue" << std::endl;
+      //std::cin.get();
             
       MCImage image;
       image.interactionmode = 1;
@@ -163,8 +163,8 @@ namespace larcaffe {
     }// if crop found
     else {
       std::cout << "[Cropper] No charged tracks through active voluem." << std::endl;
-      std::cout << "[ENTER] to continue." << std::endl;
-      std::cin.get();
+      //std::cout << "[ENTER] to continue." << std::endl;
+      //std::cin.get();
     }
   }
   
