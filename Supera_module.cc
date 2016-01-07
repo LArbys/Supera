@@ -58,6 +58,9 @@ private:
   db::Transaction* txn_;
   int nfills_before_write;
 
+  // FCL Parameters
+  bool fCosmicsMode; // activates cosmics mode in the cropper -- crop around each track
+
 };
 
 
@@ -68,6 +71,7 @@ Supera::Supera(fhicl::ParameterSet const & p)
 {
   
   std::string dbname = p.get<std::string>("DatabaseName","output_supera.mdb");
+  fCosmicsMode       = p.get<bool>("CosmicsMode",false); 
   
   // open the database
   std::cout << "[Supera] Make Database: " << dbname << std::endl;
@@ -112,6 +116,7 @@ void Supera::analyze(art::Event const & e)
 
 
   std::cout << "[Supera] Call the cropper" << std::endl;
+  cropper.fCosmicMode = fCosmicsMode;
   std::vector< larcaffe::MCImage > cropped_images;
   cropper.crop( *mctrackHandle, image, cropped_images );
 
@@ -140,7 +145,7 @@ void Supera::analyze(art::Event const & e)
     std::string out;
     data.SerializeToString(&out);
     char eventid[200];
-    sprintf( eventid, "run%06d_subrun%04d_event%06d", e.run(), e.subRun(), e.event() );
+    sprintf( eventid, "run%06d_subrun%04d_event%06d_img%dof%d", e.run(), e.subRun(), e.event(), img,(int)cropped_images.size());
     std::string key_str = eventid;
     std::cout << "[Supera] Store in DB " << std::endl;
     txn_->Put(key_str, out);

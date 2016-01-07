@@ -24,7 +24,10 @@ namespace larcaffe {
     int targetheight;
     int minpadding_t;
     int minpadding_w;
+    bool fCosmicMode;
     
+    void defineBoundingBox( const std::vector< sim::MCTrack >& mctracks, MCImage& image );
+    void fillImage( MCImage& image, Image& rawadcimage );
 
   };
 

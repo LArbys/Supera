@@ -15,7 +15,8 @@ art_make( BASENAME_ONLY
 		     OpticalDetector
 		     Geometry
            	     RawData
-			RecoBase
+		     RecoBase
+		     TimeService_service
 			Utilities			
                         ${ART_FRAMEWORK_CORE}
 			${ART_FRAMEWORK_IO_SOURCES}
