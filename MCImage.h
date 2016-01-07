@@ -16,6 +16,8 @@ namespace larcaffe {
     
     double nu_energy_gev;
 
+    bool unset;
+
     // we use MCTrack to define a bounding box for the interaction
     double mctrack_boundingbox[4][2];    
 

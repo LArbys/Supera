@@ -5,6 +5,7 @@ namespace larcaffe {
 
 
   MCImage::MCImage() {
+    unset = true;
   }
 
   MCImage::~MCImage() {

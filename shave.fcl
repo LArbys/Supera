@@ -17,6 +17,7 @@ microboone_supera:
 {
     module_type: Supera
     DatabaseName: "output_supera.mdb"
+    CosmicsMode: true
 }
 
 
