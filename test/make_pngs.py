@@ -3,7 +3,7 @@ import google.protobuf as protobuf
 import numpy as np
 import lmdb as lmdb
 import caffe_pb2 as caffe
-from PIL import Image
+from PIL import Image # 'pip install Image' to get this one
 import matplotlib.image
 
 os.system("mkdir -p images")
@@ -30,8 +30,11 @@ for key, raw_datum in lmdb_cursor:
     rescaled = (255.0 / data.max() * (data - data.min())).astype(np.uint8)
     name = 'images/%s.png'%(key)
     print "Make ",name
+
+    # RGB using unscaled ADC values
     matplotlib.image.imsave(name, data)
-    #scipy.misc.imsave(name, image)
+
+    # greyscale using scaled ADC values
     #im = Image.fromarray(rescaled)
     #im.save(name)
     
