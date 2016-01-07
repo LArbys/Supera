@@ -9,9 +9,12 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
-#pragma link C++ namespace larcaffe::supera+;
-#pragma link C++ class larcaffe::supera::converter_base+;
-#pragma link C++ class larcaffe::supera::lmdb_converter+;
+#pragma link C++ namespace larcaffe+;
+#pragma link C++ class larcaffe::logger+;
+#pragma link C++ class larcaffe::larcaffe_base+;
+#pragma link C++ class larcaffe::larbys+;
+#pragma link C++ class larcaffe::Image+;
+#pragma link C++ class larcaffe::MCImage+;
 //ADD_NEW_CLASS ... do not change this line
 #endif
 

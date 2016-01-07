@@ -1,0 +1,50 @@
+# find_ups_product is meant to be called from the top CMakeLists.txt file
+
+set( PROTOBUF_INCDIR $ENV{PROTOBUF_INCDIR} )
+set( PROTOBUF_LIBDIR $ENV{PROTOBUF_LIBDIR} )
+set( LMDB_INCDIR     $ENV{LMDB_INCDIR}     )
+set( LMDB_LIBDIR     $ENV{LMDB_LIBDIR}     )
+set( SUPERA_INCDIR   $ENV{SUPERA_BASEDIR}/SuperaCore )
+set( SUPERA_LIBDIR   $ENV{SUPERA_LIBDIR}   )
+
+include_directories( ${PROTOBUF_INCDIR} )
+include_directories( ${LMDB_INCDIR}     )
+include_directories( ${SUPERA_INCDIR}   )
+
+link_libraries( ${LIB_NAME} -L${LMDB_LIBDIR} -llmdb -L{PROTOBUF_LIBDIR} -lprotobuf -L${SUPERA_LIBDIR} -lSuperaCore )
+
+art_make( BASENAME_ONLY
+	  LIBRARY_NAME  uboone_Supera
+	  LIB_LIBRARIES
+                        ${ROOT_BASIC_LIB_LIST}
+	  MODULE_LIBRARIES Geometry
+	  		Geometry
+	  	        Geometry_service
+			Utilities
+                        RawData
+                        ${ART_FRAMEWORK_CORE}
+			${ART_FRAMEWORK_IO_SOURCES}
+                        ${ART_FRAMEWORK_PRINCIPAL}
+                        ${ART_FRAMEWORK_SERVICES_REGISTRY}
+                        ${ART_FRAMEWORK_SERVICES_OPTIONAL}
+                        ${ART_FRAMEWORK_SERVICES_OPTIONAL_TFILESERVICE_SERVICE}
+                        ${ART_PERSISTENCY_COMMON}
+                        ${ART_PERSISTENCY_PROVENANCE}
+                        ${ART_UTILITIES}
+                        ${MF_MESSAGELOGGER}
+                        ${MF_UTILITIES}
+                        ${FHICLCPP}
+                        ${CETLIB}
+                        ${ROOT_GEOM}
+                        ${ROOT_XMLIO}
+                        ${ROOT_GDML}
+                        ${ROOT_BASIC_LIB_LIST}
+			${SIMULATIONBASE}
+        )							   
+
+install_headers()
+install_source()
+
+install_fhicl()
+FILE(GLOB fcl_files *.fcl)
+install_source( EXTRAS ${fcl_files} )

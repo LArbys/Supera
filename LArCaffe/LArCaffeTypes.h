@@ -1,9 +1,15 @@
-#ifndef __SUPERATYPES_H__
-#define __SUPERATYPES_H__
+#ifndef __LARCAFFETYPES_H__
+#define __LARCAFFETYPES_H__
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace larcaffe {
+
+  typedef std::pair<unsigned int, unsigned int> Range_t;
+
+  typedef std::vector<Range_t> RangeArray_t;
 
   namespace msg {
 
@@ -19,7 +25,7 @@ namespace larcaffe {
 	"  \033[5;1;33;41m[CRITICAL]\033[00m "  ///< kCRITICAL message prefix
       };
     ///< Prefix of message
-  };
+  }
 
 }
 #endif

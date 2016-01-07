@@ -43,21 +43,22 @@ list( REMOVE_ITEM HEADERS ${DB_LMDB} )
 IF(${USE_ROOT6})
 execute_process(COMMAND rootcling
 		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
-		-s   ${SUPERA_LIBDIR}/${SHLIB}
+		-s   ${LARCAFFE_LIBDIR}/${SHLIB}
 		-rml ${SHLIB}
-		-rmf ${SUPERA_LIBDIR}/libSuperaCore.rootmap
-		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
+		-rmf ${LARCAFFE_LIBDIR}/libSuperaCore.rootmap
+		-c ${CINTFLAGS} 
+		-I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${LARCAFFE_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
 		${HEADERS} ${LINKDEF})
 ELSE()
 execute_process(COMMAND rootcint
 		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
-		-c -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
+		-c -I${ROOT_INCDIR} -I${PROTOBUF_INCDIR} -I${LMDB_INCDIR} -I${LARCAFFE_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR}
 		-p  ${HEADERS} ${LINKDEF})
 ENDIF()
 
 # Set include dirs
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${SUPERA_INCDIR})
+include_directories(${LARCAFFE_INCDIR})
 include_directories(${ROOT_INCDIR})
 include_directories(${LMDB_INCDIR})
 include_directories(${PROTOBUF_INCDIR})
@@ -65,11 +66,11 @@ set(CMAKE_CXX_FLAGS "-std=c++11")
 
 # Generate a package library ... make sure dictionary comes the end
 add_library(SuperaCore SHARED ${SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx)
-target_link_libraries(SuperaCore ${ROOT_LIB} ${LMDB_LDFLAGS} ${PROTOBUF_LDFLAGS})
+target_link_libraries(SuperaCore ${ROOT_LIB} ${LMDB_LDFLAGS} ${PROTOBUF_LDFLAGS} -L${LARCAFFE_LIBDIR} -lLArCaffe)
 
 set_target_properties( SuperaCore
 		       PROPERTIES
-	               LIBRARY_OUTPUT_DIRECTORY ${SUPERA_LIBDIR}
+	               LIBRARY_OUTPUT_DIRECTORY ${LARCAFFE_LIBDIR}
 )
 if (APPLE)
    set_property(TARGET SuperaCore PROPERTY PREFIX "lib")
@@ -83,8 +84,8 @@ IF(NOT ${USE_ROOT6})
 add_custom_command( TARGET SuperaCore
 		    POST_BUILD
 		    COMMAND rlibmap ARGS -f
-		    -o ${SUPERA_LIBDIR}/libSuperaCore.rootmap
-		    -l ${SUPERA_LIBDIR}/libSuperaCore.so
+		    -o ${LARCAFFE_LIBDIR}/libSuperaCore.rootmap
+		    -l ${LARCAFFE_LIBDIR}/libSuperaCore.so
 		    -c ${CMAKE_CURRENT_SOURCE_DIR}/LinkDef.h
 )
 ENDIF()

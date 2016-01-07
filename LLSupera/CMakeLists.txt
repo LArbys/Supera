@@ -30,9 +30,9 @@ list( REMOVE_ITEM HEADERS ${LINKDEF} )
 IF(${USE_ROOT6})
 execute_process(COMMAND rootcling
 		-f ${CMAKE_CURRENT_BINARY_DIR}/${DICT_NAME}.cxx
-		-s   ${SUPERA_LIBDIR}/${SHLIB}
+		-s   ${LARCAFFE_LIBDIR}/${SHLIB}
 		-rml ${SHLIB}
-		-rmf ${SUPERA_LIBDIR}/libLLSupera.rootmap
+		-rmf ${LARCAFFE_LIBDIR}/libLLSupera.rootmap
 		-c ${CINTFLAGS} -I${ROOT_INCDIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${HEADERS} ${LINKDEF})
 ELSE()
 execute_process(COMMAND rootcint
@@ -46,7 +46,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${ROOT_INCDIR})
 include_directories(${LMDB_INCDIR})
 include_directories(${PROTOBUF_INCDIR})
-include_directories(${SUPERA_INCDIR})
+include_directories(${LARCAFFE_INCDIR})
 set(CMAKE_CXX_FLAGS "-std=c++11")
 
 # Generate a package library ... make sure dictionary comes the end
@@ -55,7 +55,7 @@ target_link_libraries(LLSupera ${ROOT_LIB} ${LMDB_LDFLAGS} ${PROTOBUF_LDFLAGS})
 
 set_target_properties( LLSupera
 		       PROPERTIES
-	               LIBRARY_OUTPUT_DIRECTORY ${SUPERA_LIBDIR}
+	               LIBRARY_OUTPUT_DIRECTORY ${LARCAFFE_LIBDIR}
 )
 if (APPLE)
    set_property(TARGET LLSupera PROPERTY PREFIX "lib")
@@ -68,10 +68,10 @@ if(NOT ${USE_ROOT6})
 add_custom_command( TARGET LLSupera
                     POST_BUILD
                     COMMAND rlibmap ARGS -f
-                    -o ${SUPERA_LIBDIR}/libLLSupera.rootmap
-                    -l ${SUPERA_LIBDIR}/lib/libLLSupera.so
+                    -o ${LARCAFFE_LIBDIR}/libLLSupera.rootmap
+                    -l ${LARCAFFE_LIBDIR}/lib/libLLSupera.so
                     -c ${CMAKE_CURRENT_SOURCE_DIR}/LinkDef.h)
 endif()
 
-set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${SUPERA_LIBDIR}/libLLSupera.rootmap" )
+set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${LARCAFFE_LIBDIR}/libLLSupera.rootmap" )
 

@@ -1,0 +1,11 @@
+#BEGIN_PROLONG
+supera: {
+    module_type: "Supera"
+    MCRegionCut: false
+    Producers: ["daq","",""]
+    Verbosity: 3
+    DatabaseName: "toy"
+    HardLimitTimeRange: [[-1,-1],[0,0],[0,0]]
+    HardLimitWireRange: [[-1,-1],[0,0],[0,0]]
+}
+#END_PROLONG

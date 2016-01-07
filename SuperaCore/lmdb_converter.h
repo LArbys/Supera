@@ -15,7 +15,7 @@
 #define SUPERA_LMDB_CONVERTER_H
 
 #include <iostream>
-#include "converter_base.h"
+#include "SuperaCore/converter_base.h"
 
 namespace db {
   class LMDB;
@@ -40,20 +40,16 @@ namespace larcaffe {
     public:
       
       /// Default constructor
-      lmdb_converter();
+      lmdb_converter(std::string dbname="default_db");
       
       /// Default destructor
       ~lmdb_converter(){}
 
-      void set_database(const std::string dbname)
-      { _dbname = dbname; }
-
-      void set_key(const std::string key)
-      { _event_key = key; }
-
       void initialize();
 
-      void store();
+      void store_image(const std::string& key);
+
+      void write();
 
       void finalize();
 
@@ -61,8 +57,7 @@ namespace larcaffe {
 
       db::LMDB *_lmdb;
       db::Transaction *_txn;
-      std::string _dbname,_event_key;
-
+      std::string _dbname;
     };
   }
 }

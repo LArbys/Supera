@@ -2,15 +2,16 @@
 #define __SUPERA_IMG_HOLDER_CXX__
 
 #include "lmdb_converter.h"
-#include "supera_exception.h"
+#include "LArCaffe/larbys.h"
 namespace larcaffe {
 
   namespace supera {
 
-    lmdb_converter::lmdb_converter()
+    lmdb_converter::lmdb_converter(const std::string dbname)
       : converter_base("lmdb_converter")
       , _lmdb(nullptr)
-      , _dbname("output_supera.mdb")
+      , _txn(nullptr)
+      , _dbname(dbname)
     {}
 
     void lmdb_converter::initialize()
@@ -19,21 +20,34 @@ namespace larcaffe {
       _lmdb->Open(_dbname, db::NEW);
     }
 
-    void lmdb_converter::store()
+    void lmdb_converter::store_image(const std::string& key)
     {
-      if(!_txn) {
-	logger().LOG(msg::kCRITICAL,__FUNCTION__) << "Cannot execute transaction in lmdb before initialization (call initialize())" << std::endl;
-	throw supera_exception();
+      if(key.empty()) {
+	logger().LOG(msg::kCRITICAL,__FUNCTION__)
+	  << "Cannot have an empty key!" << std::endl;
+	throw larbys();
       }
+      if(!_txn) _txn = _lmdb->NewTransaction();
       
       std::string tmp_data;
 
       data().SerializeToString(&tmp_data);
 
-      auto txn = _lmdb->NewTransaction();
-      txn->Put(_event_key,tmp_data);
-      txn->Commit();
-      delete txn;
+      _data.clear_float_data();
+
+      _txn->Put(key,tmp_data);
+    }
+
+    void lmdb_converter::write()
+    {
+      if(!_txn) {
+	logger().LOG(msg::kWARNING,__FUNCTION__) << "No transaction to be stored..." << std::endl;
+	return;
+      }
+
+      _txn->Commit();
+      delete _txn;
+      _txn = nullptr;
       
     }
 

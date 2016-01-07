@@ -19,17 +19,18 @@ set(LMDB_LDFLAGS "-L$ENV{LMDB_LIBDIR} -llmdb")
 set(PROTOBUF_INCDIR $ENV{PROTOBUF_INCDIR})
 set(PROTOBUF_LDFLAGS "-L$ENV{PROTOBUF_LIBDIR} -lprotobuf")
 
-set(USE_ROOT6 $ENV{SUPERA_ROOT6})
+set(USE_ROOT6 $ENV{LARCAFFE_ROOT6})
 
 #
 # Set directories
 #
-set( SUPERA_INCDIR ${CMAKE_SOURCE_DIR}               )
-set( SUPERA_LIBDIR $ENV{SUPERA_LIBDIR}               )
-set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${SUPERA_LIBDIR} )
-execute_process(COMMAND mkdir -p ${SUPERA_LIBDIR}    )
+set( LARCAFFE_INCDIR ${CMAKE_SOURCE_DIR}               )
+set( LARCAFFE_LIBDIR $ENV{SUPERA_LIBDIR}               )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LARCAFFE_LIBDIR} )
+execute_process(COMMAND mkdir -p ${LARCAFFE_LIBDIR}    )
 
 Project (FakeSupera)
+add_subdirectory(LArCaffe)
 add_subdirectory(SuperaCore)
 add_subdirectory(LLSupera)
 

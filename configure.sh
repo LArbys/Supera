@@ -1,26 +1,27 @@
 #!/bin/bash
 
 # clean up previously set env
-if [[ -z $FORCE_SUPERA_BASEDIR ]]; then
-    # If SUPERA_BASEDIR not set, try to guess
+if [[ -z $FORCE_LARCAFFE_BASEDIR ]]; then
+    # If LARCAFFE_BASEDIR not set, try to guess
     # Find the location of this script:
-    SUPERA_BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+    LARCAFFE_BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     # Find the directory one above.
-    #export SUPERA_BASEDIR="$( cd "$( dirname "$me" )" && pwd )"
+    #export LARCAFFE_BASEDIR="$( cd "$( dirname "$me" )" && pwd )"
     #unset me;
 else
-    export SUPERA_BASEDIR=$FORCE_SUPERA_BASEDIR
+    export LARCAFFE_BASEDIR=$FORCE_LARCAFFE_BASEDIR
 fi
 
-if [[ -z $SUPERA_BUILDDIR ]]; then
-    export SUPERA_BUILDDIR=$SUPERA_BASEDIR/build
+if [[ -z $LARCAFFE_BUILDDIR ]]; then
+    export LARCAFFE_BUILDDIR=$LARCAFFE_BASEDIR/build
 fi
 
-export SUPERA_LIBDIR=$SUPERA_BUILDDIR/lib
+export LARCAFFE_LIBDIR=$LARCAFFE_BUILDDIR/lib
+export LARCAFFE_INCDIR=$LARCAFFE_BASEDIR
 
 # Abort if ROOT not installed. Let's check rootcint for this.
 if [ `command -v rootcling` ]; then
-    export SUPERA_ROOT6=1
+    export LARCAFFE_ROOT6=1
 else 
     if [[ -z `command -v rootcint` ]]; then
 	echo
@@ -30,7 +31,7 @@ else
 	echo
 	return 1;
     else
-	export SUPERA_ROOT6=0
+	export LARCAFFE_ROOT6=0
     fi
 fi
 
@@ -72,49 +73,61 @@ if [ $error -eq 1 ]; then
 	;;
 	(*)
 	printf "\033[91merror\033[00m ... aborting configuration.\n";
-	unset SUPERA_BASEDIR;
-	unset SUPERA_LIBDIR;
-	unset SUPERA_BUILDDIR;
-	unset SUPERA_ROOT6;
+	unset LARCAFFE_BASEDIR;
+	unset LARCAFFE_LIBDIR;
+	unset LARCAFFE_BUILDDIR;
+	unset LARCAFFE_ROOT6;
+	unset LARCAFFE_INCDIR;
 	return 1;
 	;;
     esac
 fi
 
 echo
-printf "\033[95mSUPERA_BASEDIR\033[00m  = $SUPERA_BASEDIR\n"
-printf "\033[95mSUPERA_BUILDDIR\033[00m = $SUPERA_BUILDDIR\n"
-printf "\033[95mSUPERA_LIBDIR\033[00m   = $SUPERA_LIBDIR\n"
+printf "\033[95mLARCAFFE_BASEDIR\033[00m  = $LARCAFFE_BASEDIR\n"
+printf "\033[95mLARCAFFE_BUILDDIR\033[00m = $LARCAFFE_BUILDDIR\n"
+printf "\033[95mLARCAFFE_LIBDIR\033[00m   = $LARCAFFE_LIBDIR\n"
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$SUPERA_LIBDIR;
-export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$SUPERA_LIBDIR;
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$LARCAFFE_LIBDIR;
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$PROTOBUF_LIBDIR:$LMDB_LIBDIR:$LARCAFFE_LIBDIR;
 
-mkdir -p $SUPERA_BUILDDIR;
+mkdir -p $LARCAFFE_BUILDDIR;
 
-if [ ! -f $SUPERA_BASEDIR/SuperaCore/caffe.pb.h ]; then
+if [ ! -f $LARCAFFE_BASEDIR/SuperaCore/caffe.pb.h ]; then
     printf "\033[93mnotice\033[00m ... generating caffe proto-buf source code (one-time operation)\n"
-    protoc $SUPERA_BASEDIR/SuperaCore/caffe.proto --proto_path=$SUPERA_BASEDIR/SuperaCore --cpp_out=$SUPERA_BASEDIR/SuperaCore/
-    mv $SUPERA_BASEDIR/SuperaCore/caffe.pb.cc $SUPERA_BASEDIR/SuperaCore/caffe.pb.cxx
+    protoc $LARCAFFE_BASEDIR/SuperaCore/caffe.proto --proto_path=$LARCAFFE_BASEDIR/SuperaCore --cpp_out=$LARCAFFE_BASEDIR/SuperaCore/
+    mv $LARCAFFE_BASEDIR/SuperaCore/caffe.pb.cc $LARCAFFE_BASEDIR/SuperaCore/caffe.pb.cxx
 fi
 
-export LD_LIBRARY_PATH=$SUPERA_LIBDIR:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$LARCAFFE_LIBDIR:$LD_LIBRARY_PATH
 
 if [ $LARLITE_OS -e 'Darwin' ]; then
-    export DYLD_LIBRARY_PATH=$SUPERA_LIBDIR:$DYLD_LIBRARY_PATH
+    export DYLD_LIBRARY_PATH=$LARCAFFE_LIBDIR:$DYLD_LIBRARY_PATH
 fi
 
-#if [ $MRB_TOP ]; then
 if [ -d $MRB_TOP/srcs/uboonecode/uboone ]; then
     echo Found local uboonecode @ \$MRB_TOP=${MRB_TOP}
     if [ ! -d $MRB_TOP/srcs/uboonecode/uboone/Supera ]; then
 	echo Making a sym-link for LArSoft API...
-	ln -s $SUPERA_BASEDIR/APILArSoft $MRB_TOP/srcs/uboonecode/uboone/Supera
+	ln -s $LARCAFFE_BASEDIR/APILArSoft $MRB_TOP/srcs/uboonecode/uboone/Supera
+    fi
+fi
+
+LARCAFFE_CXX=clang
+if [ -z `command -v $LARCAFFE_CXX` ]; then
+    LARCAFFE_CXX=g++
+    if [ -z `command -v $LARCAFFE_CXX` ]; then
+        echo
+        echo Looks like you do not have neither clang or g++!
+        echo You need one of those to compile LArCaffe... Abort config...
+        echo
+        return 1;
     fi
 fi
 
 echo
 echo "Finish configuration. To build, type:"
-echo "> cd \$SUPERA_BUILDDIR"
-echo "> cmake \$SUPERA_BASEDIR"
+echo "> cd \$LARCAFFE_BUILDDIR"
+echo "> cmake \$LARCAFFE_BASEDIR -DCMAKE_CXX_COMPILER=$LARCAFFE_CXX"
 echo "> make "
 echo
