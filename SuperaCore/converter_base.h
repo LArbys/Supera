@@ -63,6 +63,13 @@ namespace larcaffe {
 		     const unsigned int adc_offset,
 		     const unsigned int index_offset);
 
+      void copy_data(const unsigned int channel,
+		     const std::vector<float>& waveform,
+		     const unsigned int waveform_index_to_start,
+		     const unsigned int waveform_num_index_to_use,
+		     const unsigned int adc_offset,
+		     const unsigned int index_offset);
+
       void fill_zeros();
 
     protected:

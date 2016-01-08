@@ -1,11 +1,12 @@
 #BEGIN_PROLONG
 supera: {
     module_type: "Supera"
-    MCRegionCut: false
-    Producers: ["daq","",""]
-    Verbosity: 3
-    DatabaseName: "toy"
-    HardLimitTimeRange: [[-1,-1],[0,0],[0,0]]
-    HardLimitWireRange: [[-1,-1],[0,0],[0,0]]
+    CropperType: 1
+    EnablePlane: [false,false,true]
+    Producers:   ["daq","",""]
+    Verbosity:   1
+    DatabaseName: "output_supera.mdb"
+    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]
+    CropperConfig: [100,10,247,247]
 }
 #END_PROLONG

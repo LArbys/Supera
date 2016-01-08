@@ -23,7 +23,7 @@ namespace larcaffe {
      \class larbys
      Generic (base) exception class
   */
-  class larbys : public std::exception{
+  class larbys : public std::exception {
     
   public:
     

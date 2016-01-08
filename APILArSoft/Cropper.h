@@ -1,10 +1,11 @@
-#ifndef __CROPPER__
-#define __CROPPER__
+#ifndef __SUPERA_CROPPER_H__
+#define __SUPERA_CROPPER_H__
 
 #include <vector>
 
 // LArSoft
 #include "MCBase/MCTrack.h"
+#include "Simulation/SimChannel.h"
 
 // LArCaffe
 #include "LArCaffe/larcaffe_base.h"
@@ -12,7 +13,7 @@
 namespace larcaffe {
 
   namespace supera {
-
+    
     class Cropper : public larcaffe_base {
 
     public:
@@ -28,7 +29,6 @@ namespace larcaffe {
 		     unsigned int wire_padding,
 		     unsigned int target_width,
 		     unsigned int target_height);
-
       /**
 	 Given single MCTrack, returns length 4 range array (3 planes + time) \n
 	 which contains all trajectory points of input MCTrack.
@@ -57,14 +57,13 @@ namespace larcaffe {
       RangeArray_t Format( const RangeArray_t& boundary                  ) const;
 
     protected:
-
-      unsinged int _time_padding;  ///< Padding in time axis (height) for Cropper::Format function
+      
+      unsigned int _time_padding;  ///< Padding in time axis (height) for Cropper::Format function
       unsigned int _wire_padding;  ///< Padding in wire axis (width) for Cropper::Format function
       unsigned int _target_width;  ///< Unit-size (horizontal, wire, or width) for an output image of Cropper::Format function
       unsigned int _target_height; ///< Unit-size (vertical, time, or height) for an output image of Cropper::Format function
-
-  };
-
+    };
+  }
 }
 
 

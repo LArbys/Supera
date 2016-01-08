@@ -25,7 +25,7 @@ set(USE_ROOT6 $ENV{LARCAFFE_ROOT6})
 # Set directories
 #
 set( LARCAFFE_INCDIR ${CMAKE_SOURCE_DIR}               )
-set( LARCAFFE_LIBDIR $ENV{SUPERA_LIBDIR}               )
+set( LARCAFFE_LIBDIR $ENV{LARCAFFE_LIBDIR}             )
 set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LARCAFFE_LIBDIR} )
 execute_process(COMMAND mkdir -p ${LARCAFFE_LIBDIR}    )
 

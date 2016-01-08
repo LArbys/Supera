@@ -15,21 +15,17 @@ namespace larcaffe {
 
     typedef std::vector<Range_t> RangeArray_t;
 
-    class ConverterAPI : public supera_base {
+    class ConverterAPI : public larcaffe_base {
 
     public:
 
-      ConverterAPI() : supera_base("ConverterAPI") {}
+      ConverterAPI() : larcaffe_base("ConverterAPI") {}
 
       ~ConverterAPI() {}
 
-      void SetWireRange(int min, int max, unsigned int plane_id);
+      void SetRange(int min, int max, unsigned int plane_id);
 
-      void SetTimeRange(int min, int max, unsigned int plane_id);
-
-      const RangeArray_t& WireRanges() const { return _wire_range_v; }
-
-      const RangeArray_t& TimeRanges() const { return _time_range_v; }
+      const RangeArray_t& Ranges() const { return _range_v; }
 
       bool InRange(const ::geo::WireID& wid, const unsigned int time) const;
 
@@ -43,9 +39,7 @@ namespace larcaffe {
 
     protected:
 
-      RangeArray_t _wire_range_v;
-
-      RangeArray_t _time_range_v;
+      RangeArray_t _range_v;
 
     };
   }

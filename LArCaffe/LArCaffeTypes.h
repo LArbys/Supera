@@ -4,12 +4,15 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <limits>
+#include <climits>
 namespace larcaffe {
 
-  typedef std::pair<unsigned int, unsigned int> Range_t;
+  typedef ::std::pair<unsigned int, unsigned int> Range_t;
 
-  typedef std::vector<Range_t> RangeArray_t;
+  typedef ::std::vector<Range_t> RangeArray_t;
+
+  const unsigned int kINVALID_UINT = std::numeric_limits<unsigned int>::max();
 
   namespace msg {
 

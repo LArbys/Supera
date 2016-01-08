@@ -26,6 +26,7 @@
 #include "Simulation/SimChannel.h"
 #include "ConverterAPI.h"
 #include "SuperaCore/lmdb_converter.h"
+#include "Cropper.h"
 #include "LArCaffe/larbys.h"
 
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
@@ -51,35 +52,52 @@ public:
   void finalize();
 
   void MCRegion(const std::vector<sim::SimChannel>& simch_v,
-		::larcaffe::supera::RangeArray_t& wire_range_v,
-		::larcaffe::supera::RangeArray_t& time_range_v) const;
+		::larcaffe::RangeArray_t& wire_range_v,
+		::larcaffe::RangeArray_t& time_range_v) const;
+  
+public:
+  enum CropperType_t {
+    kNoCropper,
+    kPerEvent,
+    kPerInteraction
+  };
 
 private:
 
-  // Declare member data here.
-  std::vector<larcaffe::supera::converter_base*> _conv_v;
-  ::larcaffe::supera::ConverterAPI _lar_api;
-  ::larcaffe::supera::logger _logger;
-  ::larcaffe::supera::RangeArray_t _wire_range_hard_v;
-  ::larcaffe::supera::RangeArray_t _time_range_hard_v;
-  int _nfills_before_write;
-  bool _mc_region_cut;
+  std::vector<larcaffe::RangeArray_t> ImageArray(const art::Event& e);
 
+  // Declare member data here.
+  std::vector<std::vector<larcaffe::supera::converter_base*> > _db_v;
+  ::larcaffe::supera::ConverterAPI _lar_api;
+  ::larcaffe::supera::Cropper _cropper;
+  CropperType_t _cropper_type;
+  ::larcaffe::logger _logger;
+  ::larcaffe::RangeArray_t _wiretime_range_hard_v;
+  std::vector<bool> _plane_enable_v;
+  int _nfills_before_write;
   std::vector<std::string> _producer_v;
 };
 
 Supera::Supera(fhicl::ParameterSet const & p)
   : EDAnalyzer(p)
-  , _conv_v(3,nullptr)
+  , _cropper_type((CropperType_t)(p.get<unsigned short>("CropperType")))
   , _logger("Supera")
+  , _plane_enable_v(p.get<std::vector<bool> >("EnablePlane"))
   , _nfills_before_write(0)
-  , _mc_region_cut(p.get<bool>("MCRegionCut",false))
   , _producer_v(p.get<std::vector<std::string> >("Producers"))
 {
+
+  art::ServiceHandle<geo::Geometry> geom;
+  if(_plane_enable_v.size() != geom->Nplanes()) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "EnablePlane parameter must be length " << geom->Nplanes() << " (# of planes) boolean array!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
 
   ::larcaffe::msg::Level_t vlevel = (larcaffe::msg::Level_t)(p.get<unsigned short>("Verbosity",1));
   _logger.set(vlevel);
   _lar_api.set_verbosity(vlevel);
+  _cropper.set_verbosity(vlevel);
 
   std::string dbname = p.get<std::string>("DatabaseName","output_supera.mdb");
   if(dbname.empty()) {
@@ -87,57 +105,144 @@ Supera::Supera(fhicl::ParameterSet const & p)
       << "DatabaseName parameter cannot be an empty string!" << std::endl;
     throw ::larcaffe::larbys();
   }
-  
-  std::vector<std::pair<int,int> > range_v;
-  
-  range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitTimeRange");
-  for(size_t i=0; i<range_v.size(); ++i)
-    _lar_api.SetTimeRange(range_v[i].first, range_v[i].second, i);
 
-  _time_range_hard_v = _lar_api.TimeRanges();
-
-  range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitWireRange");
-  for(size_t i=0; i<range_v.size(); ++i)
-    _lar_api.SetWireRange(range_v[i].first, range_v[i].second, i);
-
-  _wire_range_hard_v = _lar_api.WireRanges();
-
-  if(_producer_v.size()!=_conv_v.size()) {
+  std::vector<std::pair<int,int> > range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitRange");
+  if(range_v.size() != (geom->Nplanes() + 1)) {
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
-      << "Producers parameter must be length " << _conv_v.size() << " string array (producer names for raw digit, wire, and hit respectively)!" << std::endl
-      << "Leave empty string to skip using specific product. An array of 3 empty strings will also cause this message!" << std::endl;
+      << "HardLimitRange must be length " << geom->Nplanes() + 1 << " (wire plane count + 1 for time)!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  for(size_t plane=0; plane<range_v.size(); ++plane)
+    _lar_api.SetRange(range_v[plane].first, range_v[plane].second, plane);
+
+  _wiretime_range_hard_v = _lar_api.Ranges();
+
+  std::vector<unsigned int> cropper_config = p.get<std::vector<unsigned int> >("CropperConfig");
+  if(cropper_config.empty()) {
+    if(_cropper_type != kNoCropper) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+	<< "Cropper requested but configuration is empty!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    else if(_logger.normal()) {
+      _logger.LOG(::larcaffe::msg::kNORMAL,__FUNCTION__,__LINE__)
+	<< "There will be no cropping done for this process." << std::endl;
+    }
+  }else if(cropper_config.size()==4){
+    _cropper.configure(cropper_config[0],
+		       cropper_config[1],
+		       cropper_config[2],
+		       cropper_config[3]);
+  }else{
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "Unexpected length of cropper configuration (length=" << cropper_config.size() 
+      << ") ... must be length 4 unsigned int array" << std::endl;
     throw ::larcaffe::larbys();
   }
 
+  if(_producer_v.size()!=3) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "Producers parameter must be length 3 string array (producer names for raw digit, wire, and hit respectively)!" << std::endl
+      << "Leave empty string to skip using specific product. An array of 3 empty strings will also cause this message!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
   _logger.LOG(::larcaffe::msg::kNORMAL,__FUNCTION__,__LINE__)
     << "Using data producers: (RawDigit, Wire, Hit) = (" 
-    << _producer_v[0] <<", " <<  _producer_v[1] << ", " << _producer_v[2] << ")" << std::endl;		
-  
-  for(size_t i=0; i<_conv_v.size(); ++i) {
+    << _producer_v[0] <<", " <<  _producer_v[1] << ", " << _producer_v[2] << ")" << std::endl;
+
+  for(size_t i=0; i<_producer_v.size(); ++i) {
+
+    _db_v.push_back(std::vector<larcaffe::supera::converter_base*>(geom->Nplanes(),nullptr));
 
     if(_producer_v[i].empty()) continue;
 
-    std::string dbname = "lmdb.";
-    dbname += _producer_v[i];
-    dbname += ".dat";
+    auto& db_v = _db_v.back();
 
-    _conv_v[i] = new ::larcaffe::supera::lmdb_converter(dbname);
-    _conv_v[i]->set_verbosity(vlevel);
-  }  
+    for(size_t plane=0; plane<geom->Nplanes(); ++plane) {
+
+      if(!_plane_enable_v[plane]) continue;
+
+      std::string dbname = "lmdb.";
+      dbname += _producer_v[i];
+      dbname += ".plane";
+      dbname += std::to_string((int)plane);
+      dbname += ".dat";
+
+      db_v[plane] = new ::larcaffe::supera::lmdb_converter(dbname);
+      db_v[plane]->set_verbosity(vlevel);
+    }
+  }
 }
-
-
-
+			   
 void Supera::beginJob() {
-
-  for(auto& p : _conv_v) if(p) p->initialize();
-
+  
+  for(auto& p_v : _db_v) 
+    for(auto& p : p_v) 
+      if(p) p->initialize();
 }
 
 void Supera::MCRegion(const std::vector<sim::SimChannel>& simch_v,
-		      ::larcaffe::supera::RangeArray_t& wire_range_v,
-		      ::larcaffe::supera::RangeArray_t& time_range_v) const
+		      ::larcaffe::RangeArray_t& wire_range_v,
+		      ::larcaffe::RangeArray_t& time_range_v) const
 { return; }
+
+std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e) 
+{
+  std::vector<larcaffe::RangeArray_t> image_v;
+
+  if(_cropper_type == kNoCropper)
+
+    image_v.push_back(_wiretime_range_hard_v);
+
+  else if(_cropper_type == kPerEvent) {
+
+    art::Handle<std::vector<sim::SimChannel> > simchHandle;
+    e.getByLabel("largeant",simchHandle);
+    if(!simchHandle.isValid()) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing SimChannel info (cannot apply MC region cut!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    
+    image_v.push_back(_cropper.Format(_cropper.WireTimeBoundary((*simchHandle))));
+
+  }else if(_cropper_type == kPerInteraction) {
+
+    art::Handle<std::vector<sim::MCTrack> > mctHandle;
+    e.getByLabel("mcreco",mctHandle);
+    if(!mctHandle.isValid()) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    
+    std::map<unsigned int,std::vector<sim::MCTrack> > interaction_m;
+    for(auto const& mct : *mctHandle) {
+      
+      auto iter = interaction_m.find(mct.AncestorTrackID());
+      
+      if(iter == interaction_m.end())
+	
+	iter = interaction_m.emplace(mct.AncestorTrackID(),std::vector<sim::MCTrack>()).first;
+
+      (*iter).second.push_back(mct);
+      
+    }
+    
+    for(auto const& int_pair : interaction_m)
+
+      image_v.push_back(_cropper.Format(_cropper.WireTimeBoundary(int_pair.second)));
+
+  }else{
+
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "Unknown cropper type: " << _cropper_type << std::endl;
+
+    throw ::larcaffe::larbys();
+
+  }
+
+  return image_v;
+}
+			   
 
 void Supera::analyze(art::Event const & e)
 {
@@ -148,73 +253,25 @@ void Supera::analyze(art::Event const & e)
   //
   // Determine region size
   //
-  ::larcaffe::supera::RangeArray_t wire_range_v = _wire_range_hard_v;
-  ::larcaffe::supera::RangeArray_t time_range_v = _time_range_hard_v;
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracting image array" << std::endl;
+  auto region_v = ImageArray(e);
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracted " << region_v.size() << " images!" << std::endl;
 
-  if(_mc_region_cut) {
-    if(_logger.debug())
-      _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Applying MCRegion cut..." << std::endl;	
+  //
+  // Save region image
+  //
 
-    art::Handle<std::vector<sim::SimChannel> > simchHandle;
-    e.getByLabel("largeant",simchHandle);
-    if(!simchHandle.isValid()) {
-      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing SimChannel info (cannot apply MC region cut!" << std::endl;
-      throw ::larcaffe::larbys();
-    }
+  art::ServiceHandle<geo::Geometry> geom;
 
-    MCRegion(*simchHandle,wire_range_v,time_range_v);
+  char key_char[100];
+  sprintf( key_char, "%07d_%05d_%06d", e.run(), e.subRun(), e.event() );
+  std::string key_str = key_char;
 
-    if(wire_range_v.size() != _wire_range_hard_v.size() ||
-       time_range_v.size() != _time_range_hard_v.size() ) {
-      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "# plane has changed after MCRegion function call!" << std::endl;
-      throw ::larcaffe::larbys();
-    }
-
-  }
-
-  // Set figure size by taking min/max from each plane
-  unsigned int wire_min = std::numeric_limits<unsigned int>::max();
-  unsigned int wire_max = 0;
-  unsigned int time_min = std::numeric_limits<unsigned int>::max();
-  unsigned int time_max = 0;
-
-  for(size_t plane=0; plane < wire_range_v.size(); ++plane) {
-    
-    auto& wire_range (wire_range_v[plane]);
-    auto& time_range (time_range_v[plane]);
-
-    _lar_api.SetWireRange(wire_range.first,
-			   wire_range.second,
-			   plane);
-    
-    _lar_api.SetTimeRange(time_range.first,
-			   time_range.second,
-			   plane);
-   
-    wire_min = std::min(wire_min,wire_range.first);
-    wire_max = std::max(wire_max,wire_range.second);
-    time_min = std::min(time_min,time_range.first);
-    time_max = std::max(time_max,time_range.second);
-  }
-
-  if(_logger.debug())
-    _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) 
-      << "Bounding image size ... wire: " << wire_min << " => " << wire_max 
-      << " time: " << time_min << " => " << time_max << std::endl;
-
-  for(auto& p : _conv_v) {
-
-    if(!p) continue;
-
-    p->set_image_size(time_max - time_min + 1, wire_max - wire_min + 1);
-
-    p->fill_zeros();
-
-  }
-
-  if(_conv_v[0]) {
-    if(_logger.debug())
-      _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
+  if(!_producer_v[0].empty()) {
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
 
     art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
     e.getByLabel(_producer_v[0], digitVecHandle);
@@ -223,13 +280,43 @@ void Supera::analyze(art::Event const & e)
 	<< "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
     else if ( digitVecHandle->empty() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty RawDigits info. skipping." << std::endl;
-    else
-      _lar_api.Copy(*digitVecHandle,*(_conv_v[0]));
+    else {
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	<< "Extracting " << region_v.size() << " images for RawDigit " << std::endl;
+
+      for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
+
+	auto const& range_v = region_v[range_index];
+
+	auto const& time_range = range_v.back();
+
+	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+	  
+	  auto& db = _db_v[0][plane];
+	  if(!db) continue;
+
+	  auto const& wire_range = range_v[plane];
+
+	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
+	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
+	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
+
+	  db->set_image_size(time_range.second - time_range.first + 1,
+			     wire_range.second - wire_range.first + 1);
+
+	  _lar_api.Copy(*digitVecHandle,*db);
+
+	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
+
+	  db->store_image(tmp_key);
+	}
+      }
+    }
   }
 
-  if(_conv_v[1]) {
-    if(_logger.debug())
-      _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Saving Wire... " << std::endl;
+  if(!_producer_v[1].empty()) {
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Wire... " << std::endl;
 
     art::Handle< std::vector<recob::Wire> > wireVecHandle;
     e.getByLabel(_producer_v[1], wireVecHandle);
@@ -238,13 +325,42 @@ void Supera::analyze(art::Event const & e)
 	<< "Missing Wires by " << _producer_v[1]<< " Skipping." << std::endl;
     else if ( wireVecHandle->empty() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Wires info. skipping." << std::endl;
-    else
-      _lar_api.Copy(*wireVecHandle, *(_conv_v[1]));
+    else {
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	<< "Extracting " << region_v.size() << " images for Wire!" << std::endl;      
+      for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
+
+	auto const& range_v = region_v[range_index];
+
+	auto const& time_range = range_v.back();
+
+	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+	  
+	  auto& db = _db_v[1][plane];
+	  if(!db) continue;
+
+	  auto const& wire_range = range_v[plane];
+
+	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
+	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
+	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
+
+	  db->set_image_size(time_range.second - time_range.first + 1,
+			     wire_range.second - wire_range.first + 1);
+
+	  _lar_api.Copy(*wireVecHandle,*db);
+
+	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
+
+	  db->store_image(tmp_key);
+	}
+      }
+    }
   }
 
-  if(_conv_v[2]) {
-    if(_logger.debug())
-      _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Saving Hit... " << std::endl;
+  if(!_producer_v[2].empty()) {
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Hit... " << std::endl;
 
     art::Handle< std::vector<recob::Hit> > hitVecHandle;
     e.getByLabel(_producer_v[1], hitVecHandle);
@@ -253,23 +369,47 @@ void Supera::analyze(art::Event const & e)
 	<< "Missing Hits by " << _producer_v[1]<< " Skipping." << std::endl;
     else if ( hitVecHandle->empty() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Hits info. skipping." << std::endl;
-    else
-      _lar_api.Copy(*hitVecHandle,*(_conv_v[2]));
+    else {
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	<< "Extracting " << region_v.size() << " images for Hit " << std::endl;
+      for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
+
+	auto const& range_v = region_v[range_index];
+
+	auto const& time_range = range_v.back();
+
+	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+	  
+	  auto& db = _db_v[2][plane];
+	  if(!db) continue;
+
+	  auto const& wire_range = range_v[plane];
+
+	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
+	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
+	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
+
+	  db->set_image_size(time_range.second - time_range.first + 1,
+			     wire_range.second - wire_range.first + 1);
+
+	  _lar_api.Copy(*hitVecHandle,*db);
+
+	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
+
+	  db->store_image(tmp_key);
+	}
+      }
+    }
   }
 
-  char key_char[100];
-  sprintf( key_char, "%07d_%05d_%06d", e.run(), e.subRun(), e.event() );
-  std::string key_str = key_char;
-
-  for(auto& p : _conv_v) if(p) p->store_image(key_str);
-
   ++_nfills_before_write;
-
   if(_nfills_before_write && _nfills_before_write%100 == 0) {
 
-    if(_logger.debug())
-      _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Saving Writing output... " << std::endl;    
-    for(auto& p : _conv_v) if(p) p->write();
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Writing output... " << std::endl;    
+    for(auto& p_v : _db_v) 
+      for(auto& p : p_v) 
+	if(p) p->write();
 
   }
   
@@ -277,14 +417,19 @@ void Supera::analyze(art::Event const & e)
 
 
 void Supera::endJob() {
-  
-  for(auto& p : _conv_v) {
 
-    if(!p) continue;
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Writing output... " << std::endl;      
 
-    p->write();
-    p->finalize();
+  for(auto& p_v : _db_v) {
+    for(auto& p : p_v) {
 
+      if(!p) continue;
+      
+      p->write();
+      p->finalize();
+      
+    }
   }
 
 }
