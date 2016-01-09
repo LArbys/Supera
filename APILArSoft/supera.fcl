@@ -17,11 +17,11 @@ supera: {
     HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]] 
     # Cropping configuration
     CropperConfig: { 
-        "TimePadding":100,    # Padding for time
-        "WirePadding":10,     # Padding for wire
-        "TimeTargetSize":247, # Target image width size (wire)
-        "WireTargetSize":247, # Target image height size (time)
-        "CompressionFactor":6 # Compression factor (see note below)
+        TimePadding:100     # Padding for time
+        WirePadding:10      # Padding for wire
+        TimeTargetSize:247  # Target image width size (wire)
+        WireTargetSize:247  # Target image height size (time)
+        CompressionFactor:6 # Compression factor (see note below)
         }
 
     # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)
