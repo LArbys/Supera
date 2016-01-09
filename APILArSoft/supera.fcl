@@ -7,6 +7,11 @@ supera: {
     Verbosity:   2
     DatabaseName: "output_supera.mdb"
     HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]
-    CropperConfig: [100,10,247,247,6]
+    CropperConfig: [100,  # Padding for time
+                    10,   # Padding for wire
+                    247,
+                    247,
+                    6
+                    ]
 }
 #END_PROLONG

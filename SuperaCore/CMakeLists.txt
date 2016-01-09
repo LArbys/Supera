@@ -2,7 +2,6 @@ string(ASCII 27 Esc)
 set(ColorReset "${Esc}[m")
 set(Yellow      "${Esc}[33m")
 
-#cmake_minimum_required (VERSION 2.8)
 project (SuperaCore)
 
 # Now set CMAKE variables for my use

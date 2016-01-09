@@ -6,6 +6,7 @@
 *Cint.cc
 *.root
 *.dat
+!*CMakeLists.txt
 *.txt
 *.bin
 build
