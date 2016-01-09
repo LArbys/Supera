@@ -3,7 +3,7 @@
 #include "Geometry/Geometry.h"
 #include "Utilities/DetectorProperties.h"
 #include "LArCaffe/larbys.h"
-
+#include "LArCaffe/LArCaffeUtils.h"
 namespace larcaffe {
   namespace supera {
 
@@ -109,6 +109,10 @@ namespace larcaffe {
 
 	if(!InRange(wire_id)) continue;
 
+	if(wire_range.first == wire_range.second) continue;
+
+	if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+
 	if(logger().debug())
 	  logger().LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__)
 	    << "Filling for wire " << wire_id.Wire 
@@ -136,15 +140,20 @@ namespace larcaffe {
 	auto const& wire_comp = _compression_factor_v[wire_id.Plane];
 	auto const& time_comp = _compression_factor_v.back();
 
-	if(wire_comp < 2 && time_comp < 2)
-	  
+	if(wire_comp < 2 && time_comp < 2) {
+
+	  if(logger().debug()) 
+	    logger().LOG(msg::kDEBUG,__FUNCTION__,__LINE__)
+	      << "Saving into image @ " << wire_id.Wire - wire_range.first << " column size " << time_range.second - time_range.first + 1
+	      << " into datum " << conv.data().height() << " : " << conv.data().width() << std::endl;
+
 	  conv.copy_data( (unsigned int)(wire_id.Wire - wire_range.first),
 			  (std::vector<short>)(wf.ADCs()),
 			  time_range.first,
 			  time_range.second - time_range.first + 1,
 			  0, 0 );
-	else {
-
+	}else {
+	  
 	  auto& img = _img_v[wire_id.Plane];
 
 	  /*
@@ -164,16 +173,23 @@ namespace larcaffe {
       for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
 
 	auto& img = _img_v[plane];
+
+	if(!img.as_vector().size()) continue;
 	auto const& wire_comp = _compression_factor_v[plane];
 	auto const& time_comp = _compression_factor_v.back();
 
-	if(wire_comp<2 && time_comp<2) continue;
+	auto const& wire_range = _range_v[plane];
+	if(wire_range.first==wire_range.second) continue;
 
-	img.compress(img.height()/time_comp,
-		     img.width()/wire_comp);
+	if(wire_comp || time_comp)
+
+	  img.compress(img.height()/time_comp,
+		       img.width()/wire_comp);
 	
+	std::cout << "Saving image (" << img.height() << "," << img.width() 
+		  << ") after compression (" << time_comp << "," << wire_comp << std::endl;
 	for(size_t w=0; w<img.width(); ++w) {
-
+	  
 	  conv.copy_data((unsigned int)w,
 			 img.as_vector(),
 			 img.index(w,0), img.height(),

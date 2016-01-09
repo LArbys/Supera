@@ -4,9 +4,9 @@ supera: {
     CropperType: 2
     EnablePlane: [true,true,true]
     Producers:   ["daq","",""]
-    Verbosity:   1
+    Verbosity:   2
     DatabaseName: "output_supera.mdb"
     HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]
-    CropperConfig: [100,10,247,247,0]
+    CropperConfig: [100,10,247,247,6]
 }
 #END_PROLONG

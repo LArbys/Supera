@@ -225,16 +225,20 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
 
     auto range_array = _cropper.Format(_cropper.WireTimeBoundary((*simchHandle)));
 
-    bool time_empty = ::larcaffe::RangeEmpty(range_array.back());
-    bool wire_empty = true;
-
+    auto const& time_range = range_array.back();
+    
     for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
-
-      if(!(::larcaffe::RangeEmpty(range_array[plane]))) { wire_empty = false; break; }
-
+      
+      auto const& wire_range = range_array[plane];
+      
+      if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
+	
+	image_v.push_back(range_array);
+	
+	break;
+	
+      }
     }
-
-    if(!wire_empty && !time_empty) image_v.push_back(range_array);
     
   }else if(_cropper_type == kPerInteraction) {
 
@@ -263,17 +267,22 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
     for(auto const& int_pair : interaction_m) {
 
       auto range_array = _cropper.Format(_cropper.WireTimeBoundary(int_pair.second));
-      
-      bool time_empty = ::larcaffe::RangeEmpty(range_array.back());
-      bool wire_empty = true;
+
+      auto const& time_range = range_array.back();
       
       for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
-	
-	if(!(::larcaffe::RangeEmpty(range_array[plane]))) { wire_empty = false; break; }
+
+	auto const& wire_range = range_array[plane];
+
+	if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
+
+	  image_v.push_back(range_array);
+
+	  break;
+
+	}
 	
       }
-      
-      if(!time_empty && !wire_empty) image_v.push_back(range_array);
 
     }
 
@@ -352,6 +361,8 @@ void Supera::analyze(art::Event const & e)
 
 	  auto const& wire_range = range_v[plane];
 
+	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 
 	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
@@ -370,6 +381,7 @@ void Supera::analyze(art::Event const & e)
 	  pWatchDB.Start();
 	  db->store_image(tmp_key);
 	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
+	  std::cout<<"image " << range_index << " @ " << plane << "saved..." << std::endl;
 	}
       }
     }
@@ -403,6 +415,8 @@ void Supera::analyze(art::Event const & e)
 	  if(!db) continue;
 
 	  auto const& wire_range = range_v[plane];
+
+	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 
@@ -456,6 +470,8 @@ void Supera::analyze(art::Event const & e)
 	  if(!db) continue;
 
 	  auto const& wire_range = range_v[plane];
+
+	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 

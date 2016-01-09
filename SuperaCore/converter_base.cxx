@@ -73,6 +73,8 @@ namespace larcaffe {
       }
 
       const size_t total_index_offset = wire * _data.height() + index_offset;
+
+      //std::cout<<"Filling img column " << num_samples << " @ " << wire << " into datum "  << _data.height() << " : " << _data.width() << std::endl;
       
       for(size_t index=0; index<num_samples; ++index)
 
@@ -124,6 +126,8 @@ namespace larcaffe {
       }
 
       const size_t total_index_offset = wire * _data.height() + index_offset;
+
+      //std::cout<<"Filling img column " << num_samples << " @ " << wire << " into datum "  << _data.height() << " : " << _data.width() << std::endl;
       
       for(size_t index=0; index<num_samples; ++index)
 
@@ -134,6 +138,8 @@ namespace larcaffe {
     void converter_base::copy_data(const Image& img) {
      
       auto const& float_vec = img.as_vector();
+
+      //std::cout<<"Filling img size " << img.height() << " : " << img.width() << " into datum " << _data.height() << " : " << _data.width() << std::endl;
  
       for(size_t idx=0; idx<float_vec.size(); ++idx) _data.set_float_data(idx,float_vec[idx]);
 
