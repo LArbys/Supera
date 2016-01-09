@@ -21,14 +21,16 @@ namespace larcaffe {
       Cropper(unsigned int time_padding=100,
 	      unsigned int wire_padding=10,
 	      unsigned int target_width=247,
-	      unsigned int target_height=247);
+	      unsigned int target_height=247,
+	      unsigned int compression_factor=0);
       
       virtual ~Cropper() {}
       
       void configure(unsigned int time_padding,
 		     unsigned int wire_padding,
 		     unsigned int target_width,
-		     unsigned int target_height);
+		     unsigned int target_height,
+		     unsigned int compression_factor);
       /**
 	 Given single MCTrack, returns length 4 range array (3 planes + time) \n
 	 which contains all trajectory points of input MCTrack.
@@ -56,12 +58,23 @@ namespace larcaffe {
        */
       RangeArray_t Format( const RangeArray_t& boundary                  ) const;
 
+      unsigned int TargetWidth()  const { return _target_width;  }
+      unsigned int TargetHeight() const { return _target_height; }
+
     protected:
       
       unsigned int _time_padding;  ///< Padding in time axis (height) for Cropper::Format function
       unsigned int _wire_padding;  ///< Padding in wire axis (width) for Cropper::Format function
       unsigned int _target_width;  ///< Unit-size (horizontal, wire, or width) for an output image of Cropper::Format function
       unsigned int _target_height; ///< Unit-size (vertical, time, or height) for an output image of Cropper::Format function
+      /**
+	 A scale factor used to compress image. If 0, original image is sampled in both height in \n
+	 multiple of target size to contain the ROI and automatically compressed (i.e. compression \n
+	 factor is computed per image and varies). If set to non-zero value, image is sampled from \n
+	 the ROI center for the target size times this compression factor, then compressed (i.e. \n
+	 sample image size and hence compression factor stays constant from one image to another). 
+       */
+      unsigned int _compression_factor;
     };
   }
 }

@@ -1,12 +1,12 @@
 #BEGIN_PROLONG
 supera: {
     module_type: "Supera"
-    CropperType: 1
-    EnablePlane: [false,false,true]
+    CropperType: 2
+    EnablePlane: [true,true,true]
     Producers:   ["daq","",""]
     Verbosity:   1
     DatabaseName: "output_supera.mdb"
     HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]
-    CropperConfig: [100,10,247,247]
+    CropperConfig: [100,10,247,247,0]
 }
 #END_PROLONG

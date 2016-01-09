@@ -130,6 +130,15 @@ namespace larcaffe {
 	_data.set_float_data( (total_index_offset + index), (float)(waveform[index + waveform_index_to_start]) );
       
     }
+
+    void converter_base::copy_data(const Image& img) {
+     
+      auto const& float_vec = img.as_vector();
+ 
+      for(size_t idx=0; idx<float_vec.size(); ++idx) _data.set_float_data(idx,float_vec[idx]);
+
+    }
+
   }
 
 }

@@ -16,7 +16,7 @@
 
 #include <iostream>
 #include "LArCaffe/larcaffe_base.h"
-
+#include "LArCaffe/Image.h"
 namespace caffe {
   class Datum;
 }
@@ -69,6 +69,8 @@ namespace larcaffe {
 		     const unsigned int waveform_num_index_to_use,
 		     const unsigned int adc_offset,
 		     const unsigned int index_offset);
+
+      void copy_data(const Image& img);		     
 
       void fill_zeros();
 

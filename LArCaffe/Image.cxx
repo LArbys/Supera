@@ -1,6 +1,8 @@
 #include "Image.h"
-#include <iostream>
 #include "larbys.h"
+#include <iostream>
+#include <string.h>
+#include <stdio.h>
 namespace larcaffe {
 
   Image::Image(size_t height, size_t width )
@@ -40,10 +42,52 @@ namespace larcaffe {
   void Image::paint(float value)
   { for(auto& v : (*this)) v=value; }
   
-  float Image::pixel( size_t h, size_t w ) const {
-    if ( !isInBounds( h, w ) )
-      return -1.;
-    return (*this)[w*fHeight + h];
+  float Image::pixel( size_t h, size_t w ) const 
+  { return (*this)[index(h,w)]; }
+
+  size_t Image::index( size_t h, size_t w ) const {
+    
+    if ( !isInBounds( h, w ) ) throw larbys("Invalid pixel index queried");
+    
+    return ( w * fHeight + h );
+  }
+
+  void Image::copy(size_t h, size_t w, const float* src, size_t num_pixel) 
+  { 
+    const size_t idx = index(h,w);
+    if(idx+num_pixel >= size()) throw larbys("memcpy size exceeds allocated memory!");
+    
+    memcpy(&((*this)[idx]),src, num_pixel * sizeof(float));
+
+  }
+
+  void Image::copy(size_t h, size_t w, const std::vector<float>& src, size_t num_pixel) 
+  {
+    if(!num_pixel)
+      this->copy(h,w,(float*)(&(src[0])),src.size());
+    else if(num_pixel < src.size()) 
+      this->copy(h,w,(float*)&src[0],num_pixel);
+    else
+      throw larbys("Not enough pixel in source!");
+  }
+
+  void Image::copy(size_t h, size_t w, const short* src, size_t num_pixel) 
+  {
+    const size_t idx = index(h,w);
+    if(idx+num_pixel >= size()) throw larbys("memcpy size exceeds allocated memory!");
+    
+    for(size_t i=0; i<num_pixel; ++i) (*this)[idx+i] = src[num_pixel];
+
+  }
+
+  void Image::copy(size_t h, size_t w, const std::vector<short>& src, size_t num_pixel) 
+  {
+    if(!num_pixel)
+      this->copy(h,w,(short*)(&(src[0])),src.size());
+    else if(num_pixel < src.size()) 
+      this->copy(h,w,(short*)&src[0],num_pixel);
+    else
+      throw larbys("Not enough pixel in source!");
   }
 
   Image Image::copy_compress(size_t height, size_t width) const

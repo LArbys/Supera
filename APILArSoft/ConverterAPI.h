@@ -6,6 +6,7 @@
 #include "RecoBase/Hit.h"
 #include "SuperaCore/converter_base.h"
 #include <utility>
+#include "LArCaffe/Image.h"
 
 namespace larcaffe {
 
@@ -23,7 +24,7 @@ namespace larcaffe {
 
       ~ConverterAPI() {}
 
-      void SetRange(int min, int max, unsigned int plane_id);
+      void SetRange(int min, int max, unsigned int plane_id, unsigned int compression_factor=0);
 
       const RangeArray_t& Ranges() const { return _range_v; }
 
@@ -31,16 +32,17 @@ namespace larcaffe {
 
       bool InRange(const ::geo::WireID& wid) const;
 
-      void Copy(const std::vector<raw::RawDigit>&, larcaffe::supera::converter_base&) const;
+      void Copy(const std::vector<raw::RawDigit>&, larcaffe::supera::converter_base&);
 
-      void Copy(const std::vector<recob::Wire>&, larcaffe::supera::converter_base&) const;
+      void Copy(const std::vector<recob::Wire>&, larcaffe::supera::converter_base&);
 
-      void Copy(const std::vector<recob::Hit>&, larcaffe::supera::converter_base&) const;
+      void Copy(const std::vector<recob::Hit>&, larcaffe::supera::converter_base&);
 
     protected:
 
       RangeArray_t _range_v;
-
+      std::vector<unsigned int> _compression_factor_v;
+      std::vector<larcaffe::Image> _img_v;
     };
   }
 }

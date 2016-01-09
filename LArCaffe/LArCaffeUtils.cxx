@@ -4,6 +4,9 @@
 
 namespace larcaffe {
 
+  bool RangeEmpty(const larcaffe::Range_t& r)
+  { return (r.first < r.second); }
+
   bool RangeValidity(const larcaffe::Range_t& r)
   { return (r.first <= r.second); }
 

@@ -20,6 +20,8 @@
 #include <limits>
 #include <climits>
 
+#include <TStopwatch.h>
+
 #include "Geometry/Geometry.h"
 #include "Utilities/DetectorProperties.h"
 #include "RawData/RawDigit.h"
@@ -28,6 +30,7 @@
 #include "SuperaCore/lmdb_converter.h"
 #include "Cropper.h"
 #include "LArCaffe/larbys.h"
+#include "LArCaffe/LArCaffeUtils.h"
 
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
@@ -62,6 +65,14 @@ public:
     kPerInteraction
   };
 
+  enum TimeProfCategory_t {
+    kIO_LARSOFT,
+    kIO_DB,
+    kIO_DATUM,
+    kANALYZE_TOTAL,
+    kTIMEPROFCATEGORYMAX
+  };
+
 private:
 
   std::vector<larcaffe::RangeArray_t> ImageArray(const art::Event& e);
@@ -76,6 +87,8 @@ private:
   std::vector<bool> _plane_enable_v;
   int _nfills_before_write;
   std::vector<std::string> _producer_v;
+  std::vector<double> _time_prof_v;
+  double _event_counter;
 };
 
 Supera::Supera(fhicl::ParameterSet const & p)
@@ -85,6 +98,8 @@ Supera::Supera(fhicl::ParameterSet const & p)
   , _plane_enable_v(p.get<std::vector<bool> >("EnablePlane"))
   , _nfills_before_write(0)
   , _producer_v(p.get<std::vector<std::string> >("Producers"))
+  , _time_prof_v(kTIMEPROFCATEGORYMAX,0.)
+  , _event_counter(0)
 {
 
   art::ServiceHandle<geo::Geometry> geom;
@@ -128,11 +143,12 @@ Supera::Supera(fhicl::ParameterSet const & p)
       _logger.LOG(::larcaffe::msg::kNORMAL,__FUNCTION__,__LINE__)
 	<< "There will be no cropping done for this process." << std::endl;
     }
-  }else if(cropper_config.size()==4){
+  }else if(cropper_config.size()==5){
     _cropper.configure(cropper_config[0],
 		       cropper_config[1],
 		       cropper_config[2],
-		       cropper_config[3]);
+		       cropper_config[3],
+		       cropper_config[4]);
   }else{
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
       << "Unexpected length of cropper configuration (length=" << cropper_config.size() 
@@ -188,6 +204,8 @@ void Supera::MCRegion(const std::vector<sim::SimChannel>& simch_v,
 
 std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e) 
 {
+  art::ServiceHandle<geo::Geometry> geom;
+
   std::vector<larcaffe::RangeArray_t> image_v;
 
   if(_cropper_type == kNoCropper)
@@ -196,19 +214,34 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
 
   else if(_cropper_type == kPerEvent) {
 
+    TStopwatch fWatch; fWatch.Start();
     art::Handle<std::vector<sim::SimChannel> > simchHandle;
     e.getByLabel("largeant",simchHandle);
+    _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
     if(!simchHandle.isValid()) {
       _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing SimChannel info (cannot apply MC region cut!" << std::endl;
       throw ::larcaffe::larbys();
     }
-    
-    image_v.push_back(_cropper.Format(_cropper.WireTimeBoundary((*simchHandle))));
 
+    auto range_array = _cropper.Format(_cropper.WireTimeBoundary((*simchHandle)));
+
+    bool time_empty = ::larcaffe::RangeEmpty(range_array.back());
+    bool wire_empty = true;
+
+    for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
+
+      if(!(::larcaffe::RangeEmpty(range_array[plane]))) { wire_empty = false; break; }
+
+    }
+
+    if(!wire_empty && !time_empty) image_v.push_back(range_array);
+    
   }else if(_cropper_type == kPerInteraction) {
 
+    TStopwatch fWatch; fWatch.Start();
     art::Handle<std::vector<sim::MCTrack> > mctHandle;
     e.getByLabel("mcreco",mctHandle);
+    _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
     if(!mctHandle.isValid()) {
       _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
       throw ::larcaffe::larbys();
@@ -227,9 +260,22 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
       
     }
     
-    for(auto const& int_pair : interaction_m)
+    for(auto const& int_pair : interaction_m) {
 
-      image_v.push_back(_cropper.Format(_cropper.WireTimeBoundary(int_pair.second)));
+      auto range_array = _cropper.Format(_cropper.WireTimeBoundary(int_pair.second));
+      
+      bool time_empty = ::larcaffe::RangeEmpty(range_array.back());
+      bool wire_empty = true;
+      
+      for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
+	
+	if(!(::larcaffe::RangeEmpty(range_array[plane]))) { wire_empty = false; break; }
+	
+      }
+      
+      if(!time_empty && !wire_empty) image_v.push_back(range_array);
+
+    }
 
   }else{
 
@@ -240,12 +286,19 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
 
   }
 
+  if(image_v.empty() && _logger.info()) 
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__)
+      << "No image made as time range is empty..." << std::endl;
+  
   return image_v;
 }
 			   
 
 void Supera::analyze(art::Event const & e)
 {
+  TStopwatch pWatchAnalyze,pWatchDB,pWatchDatum,pWatchLArIO;
+  pWatchAnalyze.Start();
+
   // Implementation of required member function here.
   if(_logger.debug())
     _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Load RawDigits Handle" << std::endl;
@@ -273,8 +326,10 @@ void Supera::analyze(art::Event const & e)
     if(_logger.info())
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
 
+    pWatchLArIO.Start();
     art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
     e.getByLabel(_producer_v[0], digitVecHandle);
+    _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
     if ( !digitVecHandle.isValid() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
 	<< "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
@@ -298,17 +353,23 @@ void Supera::analyze(art::Event const & e)
 	  auto const& wire_range = range_v[plane];
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
-	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
-	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
 
+	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
+			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
+			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+	  
+	  pWatchDatum.Start();
 	  db->set_image_size(time_range.second - time_range.first + 1,
 			     wire_range.second - wire_range.first + 1);
-
 	  _lar_api.Copy(*digitVecHandle,*db);
+	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
 
+	  pWatchDB.Start();
 	  db->store_image(tmp_key);
+	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
 	}
       }
     }
@@ -318,8 +379,10 @@ void Supera::analyze(art::Event const & e)
     if(_logger.info())
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Wire... " << std::endl;
 
+    pWatchLArIO.Start();
     art::Handle< std::vector<recob::Wire> > wireVecHandle;
     e.getByLabel(_producer_v[1], wireVecHandle);
+    _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
     if ( !wireVecHandle.isValid() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
 	<< "Missing Wires by " << _producer_v[1]<< " Skipping." << std::endl;
@@ -342,17 +405,23 @@ void Supera::analyze(art::Event const & e)
 	  auto const& wire_range = range_v[plane];
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
-	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
-	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
 
+	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
+			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
+			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+
+	  pWatchDatum.Start();
 	  db->set_image_size(time_range.second - time_range.first + 1,
 			     wire_range.second - wire_range.first + 1);
-
 	  _lar_api.Copy(*wireVecHandle,*db);
+	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
 
+	  pWatchDB.Start();
 	  db->store_image(tmp_key);
+	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
 	}
       }
     }
@@ -362,8 +431,11 @@ void Supera::analyze(art::Event const & e)
     if(_logger.info())
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Hit... " << std::endl;
 
+    pWatchLArIO.Start();
     art::Handle< std::vector<recob::Hit> > hitVecHandle;
     e.getByLabel(_producer_v[1], hitVecHandle);
+    _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
+
     if ( !hitVecHandle.isValid() )
       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
 	<< "Missing Hits by " << _producer_v[1]<< " Skipping." << std::endl;
@@ -386,17 +458,23 @@ void Supera::analyze(art::Event const & e)
 	  auto const& wire_range = range_v[plane];
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
-	  _lar_api.SetRange(wire_range.first,wire_range.second,plane);
-	  _lar_api.SetRange(time_range.first,time_range.second,geom->Nplanes());
 
+	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
+			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
+			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+
+	  pWatchDatum.Start();
 	  db->set_image_size(time_range.second - time_range.first + 1,
 			     wire_range.second - wire_range.first + 1);
-
 	  _lar_api.Copy(*hitVecHandle,*db);
+	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
 
+	  pWatchDB.Start();
 	  db->store_image(tmp_key);
+	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
 	}
       }
     }
@@ -407,12 +485,15 @@ void Supera::analyze(art::Event const & e)
 
     if(_logger.info())
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Writing output... " << std::endl;    
+    pWatchDB.Start();
     for(auto& p_v : _db_v) 
       for(auto& p : p_v) 
 	if(p) p->write();
-
+    _time_prof_v[kIO_DB] += pWatchDB.RealTime();
   }
-  
+
+  _time_prof_v[kANALYZE_TOTAL] += pWatchAnalyze.RealTime();
+  _event_counter += 1;
 }
 
 
@@ -421,6 +502,8 @@ void Supera::endJob() {
   if(_logger.info())
     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Writing output... " << std::endl;      
 
+  TStopwatch pWatchDB;
+  pWatchDB.Start();
   for(auto& p_v : _db_v) {
     for(auto& p : p_v) {
 
@@ -431,6 +514,29 @@ void Supera::endJob() {
       
     }
   }
+  double time = pWatchDB.RealTime();
+  _time_prof_v[kIO_DB] += time;
+  _time_prof_v[kANALYZE_TOTAL] += time;
+
+  if(_logger.normal()){
+
+    double diff=_time_prof_v[kANALYZE_TOTAL];
+    for(size_t i=0; i<_time_prof_v.size(); ++i) {
+      if(i == kANALYZE_TOTAL) continue;
+      diff -= _time_prof_v[i];
+    }
+
+    _logger.LOG(::larcaffe::msg::kNORMAL,__FUNCTION__,__LINE__)
+      << "Simple time profile record" << std::endl
+      << "        [0] analyze time total ... " << _time_prof_v[kANALYZE_TOTAL] / _event_counter << " [sec/event] " << std::endl
+      << "        [1] IO LArSoft ........... " << _time_prof_v[kIO_LARSOFT]    / _event_counter << " [sec/event] " << std::endl
+      << "        [2] IO Output DB  ........ " << _time_prof_v[kIO_DB]         / _event_counter << " [sec/event] " << std::endl
+      << "        [3] Datum Buffer Fill .... " << _time_prof_v[kIO_DATUM]      / _event_counter << " [sec/event] " << std::endl
+      << std::endl
+      << "        [*] Unaccounted time ([0]-rest) ... " << diff / _event_counter << " [sec/event] " << std::endl
+      << std::endl;
+
+  } 
 
 }
 

@@ -18,29 +18,31 @@ namespace larcaffe {
     Cropper::Cropper(unsigned int time_padding,
 		     unsigned int wire_padding,
 		     unsigned int target_width,
-		     unsigned int target_height)
+		     unsigned int target_height,
+		     unsigned int compression_factor)
       : _time_padding(time_padding)
       , _wire_padding(wire_padding)
       , _target_width(target_width)
       , _target_height(target_height)
+      , _compression_factor(compression_factor)
     {}
     
     void Cropper::configure(unsigned int time_padding,
 			    unsigned int wire_padding,
 			    unsigned int target_width,
-			    unsigned int target_height)
+			    unsigned int target_height,
+			    unsigned int compression_factor)
     {
       _time_padding = time_padding;
       _wire_padding = wire_padding;
       _target_width = target_width;
       _target_height = target_height;
+      _compression_factor = compression_factor;
       if(logger().info())
 	logger().LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-	  << " time padding  " << _time_padding << std::endl
-	  << " wire padding  " << _wire_padding << std::endl
-	  << " target width  " << _target_width << std::endl
-	  << " target height " << _target_height << std::endl;
-      
+	  << " Target size (w,h) = (" << _target_width << "," << _target_height << ")"
+	  << " Padding (time,wire) = (" << _time_padding << "," << _wire_padding << ")"
+	  << " Compression factor = " << _compression_factor << std::endl;
     }
 
     RangeArray_t Cropper::WireTimeBoundary(const std::vector<sim::MCTrack>& mct_v) const
@@ -81,8 +83,10 @@ namespace larcaffe {
     {
       art::ServiceHandle<geo::Geometry> geom;
       art::ServiceHandle<util::LArProperties> larp;
+      art::ServiceHandle<util::DetectorProperties> detp;
       art::ServiceHandle<util::TimeService> ts;
       const double drift_velocity = larp->DriftVelocity() * 1.e3; // make it nano-sec/cm
+      const int tick_max = detp->NumberTimeSamples();
       double xyz[3] = {0.};
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
@@ -92,22 +96,29 @@ namespace larcaffe {
       for(auto& step : mct) {
 	
 	// Figure out time
-	unsigned int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + (step.X() / drift_velocity))) + 1;
+	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + (step.X() / drift_velocity))) + 1;
+
+	if(tick < 0 || tick >= tick_max) continue;
 	
 	auto& trange = result.back();
-	if(trange.first  > tick) trange.first  = tick;
-	if(trange.second < tick) trange.second = tick;
+	if(trange.first  > (unsigned int)tick) trange.first  = tick;
+	if(trange.second < (unsigned int)tick) trange.second = tick;
 	
 	// Figure out wire per plane
 	xyz[0] = step.X();
 	xyz[1] = step.Y();
 	xyz[2] = step.Z();
 	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+
+	  try{
+
+	    auto wire_id = geom->NearestWireID(xyz, plane);
 	  
-	  auto wire_id = geom->NearestWireID(xyz, plane);
-	  
-	  if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
-	  if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
+	    if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
+	    if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
+
+	  }
+	  catch(...) {continue;}
 
 	}
 	//std::cout<<xyz[0]<<" : "<<step.T()<<" ... "<<tick<<std::endl;
@@ -206,29 +217,48 @@ namespace larcaffe {
       const int target_width = ( wire ? _target_width : _target_height );
       const int padding = ( wire ? _wire_padding : _time_padding );
       const int max = ( wire ? geom->Nwires(plane_id) : detp->NumberTimeSamples());
-      
-      if((int)(range.first) > max) {
-        logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
-	  << "Image lower bound (" << range.first << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")!" << std::endl;
-	throw larbys();
-      }
 
       if(target_width > max) {
         logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
 	  << "Image size (" << target_width << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")!" << std::endl;
 	throw larbys();
       }
+      if(_compression_factor && (int)(target_width * _compression_factor) > max) {
+        logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
+	  << "Image size (" << target_width * _compression_factor << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")!" << std::endl;
+	throw larbys();
+      }
       
       Range_t result;
+
+      if((int)(range.first) > max) {
+        if(logger().info())
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+	    << "Image lower bound (" << range.first << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")" << std::endl;
+	return result;
+      }
+
+      if(!range.first && !range.second) {
+	if(logger().info()) 
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+	    << "Zero range provided. Nothing to format... " << std::endl;
+	return result;
+      }
       
       const int center = ( range.first  + range.second ) / 2;
-      
-      int upper_bound = center + (((int)(range.second) - center + padding) / target_width) * target_width - 1;
-      int lower_bound = center - ((center - (int)(range.first) + padding) / target_width) * target_width ;
-      if(upper_bound < (int)(range.second)) upper_bound += target_width;
-      if(lower_bound > (int)(range.first) ) lower_bound -= target_width;
 
-      if(logger().info())
+      int upper_bound, lower_bound;
+      if(!_compression_factor) {
+	upper_bound = center + (((int)(range.second) - center + padding) / target_width) * target_width - 1;
+	lower_bound = center - ((center - (int)(range.first) + padding) / target_width) * target_width ;
+	if(upper_bound < (int)(range.second)) upper_bound += target_width;
+	if(lower_bound > (int)(range.first) ) lower_bound -= target_width;
+      }else{
+	upper_bound = center + _compression_factor * target_width / 2 - 1;
+	lower_bound = center - _compression_factor * target_width / 2;
+      }
+
+      if(logger().debug())
 	logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
 	  << "Preliminary bounds: " << lower_bound << " => " << upper_bound << std::endl;
 
@@ -249,8 +279,12 @@ namespace larcaffe {
       if(lower_bound >=0 && upper_bound >= max) {
 	// just need to cover range min from the max-edge
 	result.second = max - 1;
-	result.first  = max - target_width * ((max - (int)(range.first) - padding) / target_width);
-	if(result.first > range.first && (int)(result.first) > target_width) result.first -= target_width;
+	if(!_compression_factor) {
+	  result.first  = max - target_width * ((max - (int)(range.first) - padding) / target_width);
+	  if(result.first > range.first && (int)(result.first) > target_width) result.first -= target_width;
+	}
+	else result.first = max - (target_width * _compression_factor);
+
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Range [b] @ plane " << plane_id
@@ -263,9 +297,13 @@ namespace larcaffe {
       // Case3: touching only the min bound
       if(upper_bound < max && lower_bound < 0) {
 	result.first  = 0;
-	result.second = target_width * (((int)(range.second) + padding) / target_width);
-	if(result.second < range.second) result.second += target_width;
-	if((int)(result.second) >= max) result.second -= target_width;
+	if(!_compression_factor) {
+	  result.second = target_width * (((int)(range.second) + padding) / target_width);
+	  if(result.second < range.second) result.second += target_width;
+	  if((int)(result.second) >= max) result.second -= target_width;
+	}
+	else result.second = target_width * _compression_factor;
+	
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Range [c] @ plane " << plane_id
@@ -276,8 +314,17 @@ namespace larcaffe {
       }
       
       // Case 4: touching both bounds
-      while(upper_bound >= max) upper_bound -= target_width;
-      while(lower_bound <  0  ) lower_bound += target_width;
+      if(!_compression_factor) {
+	while(upper_bound >= max) upper_bound -= target_width;
+	while(lower_bound <  0  ) lower_bound += target_width;
+      }else{
+	logger().LOG(msg::kCRITICAL,__FUNCTION__,__LINE__)
+	  << "Logic error: for a fixed scale factor this error should not be raised..." << std::endl;
+	throw larbys();
+      }
+
+      result.first  = lower_bound;
+      result.second = upper_bound;
       
       if(logger().info())
 	logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
