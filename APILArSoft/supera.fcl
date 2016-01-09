@@ -1,17 +1,34 @@
 #BEGIN_PROLONG
 supera: {
     module_type: "Supera"
-    CropperType: 2
-    EnablePlane: [true,true,true]
-    Producers:   ["daq","",""]
-    Verbosity:   2
-    DatabaseName: "output_supera.mdb"
-    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]
+    # Cropper type 0 = no cropping, 1 = one image/plane/event, 2 = one image / interaction/plane/event
+    CropperType: 2 
+    # store image from each plane by enabling boolean (length = # planes, collection plane = 2)
+    EnablePlane: [true,true,true] 
+    # use RawDigit, Wire, and Hit as input respectively. Only RawDigit impelmented for now
+    Producers:   ["daq","",""] 
+    # Verbosity level, 1 = INFO and quite verbose. 0 will potentially kill your terminal. 2 is normal
+    Verbosity:   2  
+    # output db name (producer name, plane id will be padded for different image)
+    DatabaseName: "output_supera.mdb" 
+    # A hard-cut limit for outer edge of an image. A range is specified by [min,max] pair for each plane and time.
+    # The last element is for the time and other elements respect plane ID. Length should be # planes + 1 for 
+    # used geometry.
+    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[-1,-1]] 
+    # Cropping configuration
     CropperConfig: [100,  # Padding for time
                     10,   # Padding for wire
-                    247,
-                    247,
-                    6
+                    247,  # Target image width size (wire)
+                    247,  # Target image height size (time)
+                    6     # Compression factor (see note below)
                     ]
+    # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)
+    #       then it tries to fit into the output image w.r.t. the center of ROI. If compression factor is 0 or 1, then
+    #       it just crops the output iamge size as is. If > 1, then output image sample is originally its target
+    #       size (height & width) times the compresion factor, then it compresses this image down to fit the specified
+    #       target size.
+    # Note for FUTURE: with compression factor 0, plan to support what Kazu used to do: variable image size by extending
+    #                  in the unit of target height/width. Downside is that a compression factor is going to be variable
+    #                  from one image to antoher.
 }
 #END_PROLONG
