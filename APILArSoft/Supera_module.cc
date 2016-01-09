@@ -132,8 +132,10 @@ Supera::Supera(fhicl::ParameterSet const & p)
 
   _wiretime_range_hard_v = _lar_api.Ranges();
 
-  std::vector<unsigned int> cropper_config = p.get<std::vector<unsigned int> >("CropperConfig");
-  if(cropper_config.empty()) {
+
+  fhicl::ParameterSet cropper_params = p.get<fhicl::ParameterSet>("CropperConfig");
+							       
+  if(cropper_params.is_empty()) {
     if(_cropper_type != kNoCropper) {
       _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
 	<< "Cropper requested but configuration is empty!" << std::endl;
@@ -143,19 +145,29 @@ Supera::Supera(fhicl::ParameterSet const & p)
       _logger.LOG(::larcaffe::msg::kNORMAL,__FUNCTION__,__LINE__)
 	<< "There will be no cropping done for this process." << std::endl;
     }
-  }else if(cropper_config.size()==5){
-    _cropper.configure(cropper_config[0],
-		       cropper_config[1],
-		       cropper_config[2],
-		       cropper_config[3],
-		       cropper_config[4]);
-  }else{
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
-      << "Unexpected length of cropper configuration (length=" << cropper_config.size() 
-      << ") ... must be length 4 unsigned int array" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-
+  }else {
+    // attempt to fill the parameters
+    std::vector<unsigned int> cropper_config;
+    cropper_config.push_back( cropper_params.get< unsigned int >( "TimePadding" ) );
+    cropper_config.push_back( cropper_params.get< unsigned int >( "WirePadding" ) );
+    cropper_config.push_back( cropper_params.get< unsigned int >( "TimeTargetSize" ) );
+    cropper_config.push_back( cropper_params.get< unsigned int >( "WireTargetSize" ) );
+    cropper_config.push_back( cropper_params.get< unsigned int >( "CompressionFactor" ) );
+    if(cropper_config.size()==5){
+      // we got them all. setup the cropper.
+      _cropper.configure(cropper_config[0],
+			 cropper_config[1],
+			 cropper_config[2],
+			 cropper_config[3],
+			 cropper_config[4]);
+    }else{
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+	<< "Unexpected length of cropper configuration (length=" << cropper_config.size() 
+	<< ") ... must be length 5 unsigned int array" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+  }//end of if cropper_param not empty
+  
   if(_producer_v.size()!=3) {
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
       << "Producers parameter must be length 3 string array (producer names for raw digit, wire, and hit respectively)!" << std::endl
