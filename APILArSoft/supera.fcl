@@ -33,6 +33,9 @@ supera: {
     #                  from one image to antoher.
     # Filters
     ImageFilters: ["FilterEmptyImages"]
+    FilterConfigs: {
+        FilterEmptyImages: {}
+        }
     # Note: Image filters can be used to remove images that satisfy certain requirements, e.g. seem to be an empty image
 }
 #END_PROLONG

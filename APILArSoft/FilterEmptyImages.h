@@ -16,7 +16,7 @@ namespace larcaffe {
       
       // required
       virtual std::string name() const { return "FilterEmptyImages"; };
-      virtual void configure() {};
+      virtual void configure( fhicl::ParameterSet const & p );
       virtual bool doWeKeep( const larcaffe::supera::converter_base&  );
       
     };

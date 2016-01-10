@@ -17,6 +17,7 @@
 
 #include <string>
 #include <map>
+#include "fhiclcpp/ParameterSet.h"
 #include "SuperaCore/converter_base.h"
 #include "FilterFactory.h"
 #include "LArCaffe/larbys.h"
@@ -33,7 +34,7 @@ namespace larcaffe {
 
       // both functions called by Supera_module before storing image
       virtual std::string name() const = 0;        //< return identify for type of filter
-      virtual void configure() = 0;                //< user function to configure class before applying filter -- called by Supera_module
+      virtual void configure( fhicl::ParameterSet const & p ) = 0;                //< user function to configure class before applying filter -- called by Supera_module
       virtual bool doWeKeep( const larcaffe::supera::converter_base&  ) = 0; //< apply filter -- called by Supera_module
       
       static void registerConcreteFactory( const std::string& name, FilterFactory* factory ) {

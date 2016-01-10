@@ -172,8 +172,13 @@ Supera::Supera(fhicl::ParameterSet const & p)
 
   // setup filters
   std::vector<std::string> filter_names = p.get< std::vector<std::string> >( "ImageFilters" );
+  fhicl::ParameterSet filter_params = p.get< fhicl::ParameterSet >( "FilterConfigs" );
   for ( std::vector<std::string>::iterator it_string=filter_names.begin(); it_string!=filter_names.end(); it_string++ ) {
-    _filter_list.emplace_back( ::larcaffe::supera::FilterBase::create( *it_string ) );
+    std::string filter_name = *it_string;
+    ::larcaffe::supera::FilterBase* filter = ::larcaffe::supera::FilterBase::create( filter_name );
+    fhicl::ParameterSet params = filter_params.get< fhicl::ParameterSet >( filter_name );
+    filter->configure( params );
+    _filter_list.emplace_back( filter );
   }
   
   if(_producer_v.size()!=3) {
