@@ -2,7 +2,7 @@
 supera: {
     module_type: "Supera"
     # Cropper type 0 = no cropping, 1 = one image/plane/event, 2 = one image / interaction/plane/event
-    CropperType: 2 
+    CropperType: 1
     # store image from each plane by enabling boolean (length = # planes, collection plane = 2)
     EnablePlane: [true,true,true] 
     # use RawDigit, Wire, and Hit as input respectively. Only RawDigit impelmented for now
@@ -23,7 +23,6 @@ supera: {
         WireTargetSize:247  # Target image height size (time)
         CompressionFactor:6 # Compression factor (see note below)
         }
-
     # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)
     #       then it tries to fit into the output image w.r.t. the center of ROI. If compression factor is 0 or 1, then
     #       it just crops the output iamge size as is. If > 1, then output image sample is originally its target
@@ -32,5 +31,8 @@ supera: {
     # Note for FUTURE: with compression factor 0, plan to support what Kazu used to do: variable image size by extending
     #                  in the unit of target height/width. Downside is that a compression factor is going to be variable
     #                  from one image to antoher.
+    # Filters
+    ImageFilters: ["FilterEmptyImages"]
+    # Note: Image filters can be used to remove images that satisfy certain requirements, e.g. seem to be an empty image
 }
 #END_PROLONG

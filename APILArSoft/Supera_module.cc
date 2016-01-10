@@ -31,6 +31,7 @@
 #include "Cropper.h"
 #include "LArCaffe/larbys.h"
 #include "LArCaffe/LArCaffeUtils.h"
+#include "FilterBase.h"
 
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
@@ -89,6 +90,7 @@ private:
   std::vector<std::string> _producer_v;
   std::vector<double> _time_prof_v;
   double _event_counter;
+  std::vector< larcaffe::supera::FilterBase* > _filter_list;
 };
 
 Supera::Supera(fhicl::ParameterSet const & p)
@@ -167,6 +169,12 @@ Supera::Supera(fhicl::ParameterSet const & p)
       throw ::larcaffe::larbys();
     }
   }//end of if cropper_param not empty
+
+  // setup filters
+  std::vector<std::string> filter_names = p.get< std::vector<std::string> >( "ImageFilters" );
+  for ( std::vector<std::string>::iterator it_string=filter_names.begin(); it_string!=filter_names.end(); it_string++ ) {
+    _filter_list.emplace_back( ::larcaffe::supera::FilterBase::create( *it_string ) );
+  }
   
   if(_producer_v.size()!=3) {
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
@@ -388,6 +396,14 @@ void Supera::analyze(art::Event const & e)
 	  _lar_api.Copy(*digitVecHandle,*db);
 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
+	  // Filter: add the ability to reject images
+	  bool keep = true;
+	  for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
+	    keep |= (*it_filters)->doWeKeep( *db );
+	  }
+	  if ( !keep )
+	    continue;
+	  
 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
 
 	  pWatchDB.Start();
