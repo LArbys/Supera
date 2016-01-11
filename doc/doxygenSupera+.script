@@ -1,0 +1,11 @@
+# New, simpler script for generating doxygen documentation.
+# It uses the main (maintained) doxygenMyProject.script,
+
+@INCLUDE = $(SUPERA_BASEDIR)/doc/doxygenSupera.script
+
+OUTPUT_DIRECTORY       = $(SUPERA_BASEDIR)/doc/dOxygenSupera+
+
+#
+# ROOT
+#
+INPUT +=$(ROOTSYS)/include
