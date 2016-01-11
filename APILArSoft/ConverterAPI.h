@@ -38,6 +38,8 @@ namespace larcaffe {
 
       void Copy(const std::vector<recob::Hit>&, larcaffe::supera::converter_base&);
 
+      
+
     protected:
 
       RangeArray_t _range_v;

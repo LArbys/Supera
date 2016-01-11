@@ -204,6 +204,8 @@ namespace larcaffe {
     
     void ConverterAPI::Copy(const std::vector<recob::Hit>&, larcaffe::supera::converter_base&)
     {}
+
+    //void ConverterAPI::
     
   }
 }

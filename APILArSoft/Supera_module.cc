@@ -404,10 +404,14 @@ void Supera::analyze(art::Event const & e)
 	  // Filter: add the ability to reject images
 	  bool keep = true;
 	  for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
-	    keep |= (*it_filters)->doWeKeep( *db );
+	    if( !(*it_filters)->doWeKeep( *db ) ) {
+	      keep = false;
+	      break;
+	    }
 	  }
-	  if ( !keep )
+	  if ( !keep ) {
 	    continue;
+	  }
 	  
 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
 

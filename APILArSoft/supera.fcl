@@ -34,8 +34,14 @@ supera: {
     # Filters
     ImageFilters: ["FilterEmptyImages"]
     FilterConfigs: {
-        FilterEmptyImages: {}
+        FilterEmptyImages: {
+            SigmaToCheck: 3
+            RatioThreshold:1.0
+            }
         }
-    # Note: Image filters can be used to remove images that satisfy certain requirements, e.g. seem to be an empty image
+    # Note: Image filters can be used to remove images that satisfy certain requirements, e.g. seem to be an empty image.
+    #  To use a filter, add it to 'ImageFilters'
+    # Available filters:
+    #   FilterEmptyImages: Does a simple analysis of pedestal distribution and determines if image is empty
 }
 #END_PROLONG

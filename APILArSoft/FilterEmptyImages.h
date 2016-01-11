@@ -2,6 +2,7 @@
 #define __FILTER_EMPTY_IMAGES__
 
 #include "FilterBase.h"
+#include "TH1D.h"
 
 namespace larcaffe {
 
@@ -17,11 +18,18 @@ namespace larcaffe {
       // required
       virtual std::string name() const { return "FilterEmptyImages"; };
       virtual void configure( fhicl::ParameterSet const & p );
-      virtual bool doWeKeep( const larcaffe::supera::converter_base&  );
+      virtual bool doWeKeep( const ::larcaffe::supera::converter_base& img_data  );
+      
+      TH1D* hadcs;
+
+      // Configuration Parameters
+      int sigmaToCheck;
+      double ratioThreshold;
+      
       
     };
-
-
+    
+    
     class FilterEmptyImagesFactory : public FilterFactory {
     public:
       FilterEmptyImagesFactory() {
