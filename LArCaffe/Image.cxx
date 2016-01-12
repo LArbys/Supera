@@ -88,7 +88,10 @@ namespace larcaffe {
       throw larbys( oops );
     }
     
-    for(size_t i=0; i<num_pixel; ++i) (*this)[idx+i] = src[num_pixel];
+    for(size_t i=0; i<num_pixel; ++i)  {
+      (*this)[idx+i] = src[i];
+      //std::cout << "(" << h+i << "," << w << ":" << src[i] << std::endl;
+    }
 
   }
 
