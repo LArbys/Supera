@@ -73,7 +73,7 @@ namespace larcaffe {
   {
     if(!num_pixel)
       this->copy(h,w,(float*)(&(src[0])),src.size());
-    else if(num_pixel < src.size()) 
+    else if(num_pixel <= src.size()) 
       this->copy(h,w,(float*)&src[0],num_pixel);
     else
       throw larbys("Not enough pixel in source!");
@@ -89,7 +89,7 @@ namespace larcaffe {
     }
     
     for(size_t i=0; i<num_pixel; ++i)  {
-      (*this)[idx+i] = src[i];
+      (*this)[idx+i] = (float)src[i];
       //std::cout << "(" << h+i << "," << w << ":" << src[i] << std::endl;
     }
 
@@ -99,7 +99,7 @@ namespace larcaffe {
   {
     if(!num_pixel)
       this->copy(h,w,(short*)(&(src[0])),src.size());
-    else if(num_pixel < src.size()) 
+    else if(num_pixel <= src.size()) 
       this->copy(h,w,(short*)&src[0],num_pixel);
     else
       throw larbys("Not enough pixel in source!");

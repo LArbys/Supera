@@ -47,7 +47,7 @@ namespace larcaffe {
 
       //if(logger().debug())
       //logger().LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) 
-      std::cout << "set range " << min << " => " << max << " @ plane " << plane_id << " compression = " << compression_factor << std::endl;
+      //std::cout << "set range " << min << " => " << max << " @ plane " << plane_id << " compression = " << compression_factor << std::endl;
       
       _range_v[plane_id].first  = min;
       _range_v[plane_id].second = max;
@@ -74,7 +74,7 @@ namespace larcaffe {
       auto& time_range = _range_v.back();
 
       return ( time_range.first  <= time &&
-	       time_range.second > time );
+	       time_range.second >= time );
     }
 
     void ConverterAPI::Copy(const std::vector<raw::RawDigit>& digit_v, 
@@ -99,16 +99,11 @@ namespace larcaffe {
 	// need to expand if compression factor is > 1
 	// this is because the target size is given when setting image size
 	// ranges are includes. image sizes are not.
-	std::cout << "time range: " << time_range.first << " " << time_range.second << " " << time_comp << std::endl;
+	//std::cout << "time range: " << time_range.first << " " << time_range.second << " " << time_comp << std::endl;
 	img.resize( (time_range.second - time_range.first)+1, (wire_range.second - wire_range.first)+1 );
 
 	img.clear_data();
       }
-      std::cout << "[ConverterAPI] allocated space.";
-      for (unsigned int i=0; i<geom->Nplanes(); i++) {
-	std::cout << " plane[" << i << "]=(" << _img_v[i].height() << "," << _img_v[i].width() << ") ";
-      }
-      std::cout << std::endl;
 
       for(auto const& wf : digit_v) {
 	
@@ -167,12 +162,11 @@ namespace larcaffe {
 			  time_range.second - time_range.first + 1,
 			  0, 0 );
 	}else {
-	  // compression: copy ?
+	  // compression: copy
 	  auto& img = _img_v[wire_id.Plane];
 	  img.copy(0,wire_id.Wire - wire_range.first,
-		   (short*)(&(wf.ADCs()[time_range.first])),
-		   time_range.second - time_range.first+1);
-	  
+	   	   wf.ADCs().data()+time_range.first,
+	   	   time_range.second-time_range.first+1);
 	}
       }
       
@@ -188,9 +182,9 @@ namespace larcaffe {
 	if(wire_range.first==wire_range.second) continue;
 
 	if(wire_comp || time_comp) {
-	  //img.compress(img.height()/time_comp, img.width()/wire_comp);
+	  img.compress(img.height()/time_comp, img.width()/wire_comp);
 	  // change size due to compression
-	  //conv.set_image_size( img.height(), img.width() );
+	  conv.set_image_size( img.height(), img.width() );
 	}
 	
 	logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
@@ -200,7 +194,7 @@ namespace larcaffe {
 	  
 	  conv.copy_data((unsigned int)w,
 			 img.as_vector(),
-			 img.index(w,0), img.height(),
+			 img.index(0,w), img.height(),
 			 0, 0);
 	  
 	}
