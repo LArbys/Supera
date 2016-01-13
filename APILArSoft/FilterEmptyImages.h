@@ -25,7 +25,7 @@ namespace larcaffe {
       // Configuration Parameters
       int sigmaToCheck;
       double ratioThreshold;
-      
+      int verbosity;
       
     };
     

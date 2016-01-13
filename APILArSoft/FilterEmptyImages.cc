@@ -3,6 +3,7 @@
 #include "SuperaCore/caffe.pb.h"
 #include "TF1.h"
 #include "TMath.h"
+#include "TFile.h"
 
 namespace larcaffe {
 
@@ -10,7 +11,7 @@ namespace larcaffe {
 
     FilterEmptyImages::FilterEmptyImages() {
       // is this going cuase weird problems somewhere?
-      hadcs = new TH1D("adc_filter_empty_images", "", 4096, 0, 4096);
+      hadcs = new TH1D("adc_filter_empty_images", "", 4096*5, 0, 4096);
     }
 
     FilterEmptyImages::~FilterEmptyImages() {
@@ -20,9 +21,10 @@ namespace larcaffe {
     void FilterEmptyImages::configure( fhicl::ParameterSet const & p ) {
       sigmaToCheck = p.get<int>("SigmaToCheck",3);
       ratioThreshold = p.get<float>("RatioThreshold",1.0);
+      verbosity = p.get<int>("Verbosity",0);
     }
 
-    bool FilterEmptyImages::doWeKeep( const ::larcaffe::supera::converter_base& img_data  ) { 
+    bool FilterEmptyImages::doWeKeep( const ::larcaffe::supera::converter_base& img_data ) { 
       //std::cout << "[FilterEmptyImages] Test. Do Nothing." << std::endl;
       // This is a simple filter algorithm.
       // We histogram the ADC values and then fit a gaussian to the maximum
@@ -42,37 +44,50 @@ namespace larcaffe {
 	}
       }
 
+      // TFile* temp = new TFile("temp.root", "RECREATE");
+      // temp->cd();
+      // hadcs->Write("hadcs");
+      // temp->Close();
+
       int maxbin = hadcs->GetMaximumBin();
       double maxadc = hadcs->GetBinLowEdge( maxbin );
       TF1* f = new TF1("adcfit", "gaus(0)", maxadc-20, maxadc+20);
       f->SetParameter( 0, hadcs->GetMaximum() );
       f->SetParameter( 1, hadcs->GetMean() );
       f->SetParameter( 2, hadcs->GetRMS() );
-      hadcs->Fit( f, "RQ", "" );
+      hadcs->Fit( f, "RQ", "", hadcs->GetMean()-2*hadcs->GetRMS(), hadcs->GetMean()+2*hadcs->GetRMS() );
       // for (int b=1; b<=hadcs->GetXaxis()->GetNbins(); b++ ) {
       // 	std::cout << "[bin " << b << "] " << hadcs->GetBinContent( b ) << std::endl;
       // }
 
-      int fitted_mean_adc  = hadcs->FindBin( f->GetParameter(1) );
-      int fitted_sigma_adc = f->GetParameter(2)+1;
-      int hightail_tot = 0;
-      for (int b=fitted_mean_adc+(int)(sigmaToCheck*fitted_sigma_adc); b<hadcs->GetXaxis()->GetNbins(); b++ ) {
-	hightail_tot +=  (int)hadcs->GetBinContent(b+1);
+      float fitted_mean_adc  = f->GetParameter(1);
+      float fitted_sigma_adc = f->GetParameter(2);
+      //int fitted_mean_bin = hadcs->FindBin( fitted_mean_adc );
+      int tail_start_bin = hadcs->FindBin( fitted_mean_adc+sigmaToCheck*fitted_sigma_adc )+1;
+      float start_bin_val = hadcs->GetXaxis()->GetBinLowEdge( tail_start_bin );
+      float tail_integral = 0;
+      for (int b=tail_start_bin; b<=hadcs->GetXaxis()->GetNbins(); b++ ) {
+	tail_integral +=  hadcs->GetBinContent(b);
       }
       //std::cout << "Image H:" << datum.height() << " W:" << datum.width() << " Pixels:" << datum.height()*datum.width() << std::endl;
-      //std::cout << "HADC mean=" << hadcs->GetMean() << " rms=" << hadcs->GetRMS() << " maxadc=" << maxadc << std::endl;
+      if ( verbosity )
+	std::cout << "[FilterEmptyImage] HADC mean=" << hadcs->GetMean() << " rms=" << hadcs->GetRMS() << " maxadc=" << maxadc << std::endl;
       
       // CDF
-      double cdf = 0.5*(1 + TMath::Erf( ((double)(fitted_mean_adc+fitted_sigma_adc*sigmaToCheck) - f->GetParameter(1))/(TMath::Sqrt(2)*f->GetParameter(2)) ) );
-      //std::cout << "CDF(@" << fitted_sigma_adc << "adcs=sigma): " << 1.0-cdf << std::endl;
-
+      double cdf = 0.5*(1 + TMath::Erf( (start_bin_val - fitted_mean_adc)/(TMath::Sqrt(2)*fitted_sigma_adc) ) );
+      if ( verbosity )
+	std::cout << "[FilterEmptyImage] CDF(@" << fitted_sigma_adc << "adcs=sigma): " << 1.0-cdf << std::endl;
+      
       // Integral
-      double tail_integral = ((double)hightail_tot)/hadcs->Integral();
-      double tail_ratio = tail_integral/(1.0-cdf);
-      //std::cout << "Tail Integral: " << tail_integral << " = " << hightail_tot << "/" << hadcs->Integral() << std::endl;
-      //std::cout << "Tail Ratio: " << tail_ratio << std::endl;
-      if ( tail_ratio < ratioThreshold ) {
-	std::cout << "[FilterEmptyImages] Empty! ratio(" << tail_ratio << ") < threshold(" << ratioThreshold << ")" << std::endl;
+      double tail_expectation = hadcs->Integral()*(1.0-cdf);
+      if ( verbosity ) 
+	std::cout << "[FilterEmptyImages] "
+		  << " Tail Integral: " << tail_integral << " vs. expectation " << tail_expectation
+		  << " Tail Ratio=" << tail_integral/tail_expectation
+		  << std::endl;
+      
+      if ( tail_integral < tail_expectation+sqrt(tail_expectation)*3.0 ) {
+	std::cout << "[FilterEmptyImages] Empty! tail_integral(" << tail_integral << ") < tail_expectation+3sig (" << tail_expectation+sqrt(tail_expectation)*3.0 << ")" << std::endl;
 	return false;
       }
       //std::cout << "[FilterEmptyImages] Tail Bigger than expectation: " << tail_ratio << ">" << ratioThreshold << std::endl;

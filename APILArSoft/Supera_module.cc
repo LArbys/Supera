@@ -388,20 +388,23 @@ void Supera::analyze(art::Event const & e)
 
 	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
 
-	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
+	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i); // initialize every plane
 
+	  // set range of the current plane
 	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
+			     (wire_range.second - wire_range.first+1) / _cropper.TargetWidth() );
+	  // set the time range
 	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
-	  
+			     (time_range.second - time_range.first+1) / _cropper.TargetHeight() );
+	  std::cout << "set range in super_module: W=" << wire_range.second - wire_range.first + 1 << "/" << _cropper.TargetWidth() << std::endl;
+	  std::cout << "set range in super_module: T=" << time_range.second - time_range.first + 1<< "/" << _cropper.TargetHeight() << std::endl;
 	  pWatchDatum.Start();
 	  db->set_image_size(time_range.second - time_range.first + 1,
 			     wire_range.second - wire_range.first + 1);
 	  _lar_api.Copy(*digitVecHandle,*db);
 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
-	  // Filter: add the ability to reject images
+	  // Filter: add the ability xto reject images
 	  bool keep = true;
 	  for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
 	    if( !(*it_filters)->doWeKeep( *db ) ) {
