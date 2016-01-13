@@ -16,7 +16,13 @@ def datum_to_array( datum ):
         image[t,:] = datum.float_data[ datum.width*(t): datum.width*(t+1)]
     return image
 
+if len(sys.argv)!=3:
+    print "usage: python make_pngs.py [lmdb folder/db] [output dir]"
+    print "Will dump out a bunch of RGB pngs whose name will be the key."
+    sys.exit(-1)
+
 lmdb_dir = sys.argv[1]
+outdir   = sys.argv[2]
 
 lmdb_env = lmdb.open( lmdb_dir )
 lmdb_txn = lmdb_env.begin()
@@ -28,7 +34,7 @@ for key, raw_datum in lmdb_cursor:
     label = datum.label
     data = datum_to_array( datum )
     rescaled = (255.0 / data.max() * (data - data.min())).astype(np.uint8)
-    name = 'images/%s.png'%(key)
+    name = '%s/%s.png'%(outdir,key)
     print "Make ",name
 
     # RGB using unscaled ADC values
