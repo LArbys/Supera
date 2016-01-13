@@ -124,7 +124,7 @@ namespace larcaffe {
 	    value += (*this)[orig_w * fHeight + orig_h];
 	  }
 	//std::cout<<std::endl;
-	result[w*height+h] = value;
+	result[w*height+h] = value/float(width_factor*height_factor);
       }
     }
     return result;

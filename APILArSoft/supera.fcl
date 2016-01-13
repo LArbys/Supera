@@ -2,7 +2,7 @@
 supera: {
     module_type: "Supera"
     # Cropper type 0 = no cropping, 1 = one image/plane/event, 2 = one image / interaction/plane/event
-    CropperType: 1
+    CropperType: 2
     # store image from each plane by enabling boolean (length = # planes, collection plane = 2)
     EnablePlane: [true,true,true] 
     # use RawDigit, Wire, and Hit as input respectively. Only RawDigit impelmented for now
@@ -19,9 +19,9 @@ supera: {
     CropperConfig: { 
         TimePadding:100     # Padding for time
         WirePadding:10      # Padding for wire
-        TimeTargetSize:247  # Target image width size (wire)
-        WireTargetSize:247  # Target image height size (time)
-        CompressionFactor:6 # Compression factor (see note below)
+        TimeTargetSize:400  # Target image width size (wire)
+        WireTargetSize:400  # Target image height size (time)
+        CompressionFactor:5 # Compression factor (see note below)
         }
     # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)
     #       then it tries to fit into the output image w.r.t. the center of ROI. If compression factor is 0 or 1, then
@@ -32,11 +32,12 @@ supera: {
     #                  in the unit of target height/width. Downside is that a compression factor is going to be variable
     #                  from one image to antoher.
     # Filters
-    ImageFilters: ["FilterEmptyImages"]
+    ImageFilters: []
     FilterConfigs: {
         FilterEmptyImages: {
-            SigmaToCheck: 3
+            SigmaToCheck: 5
             RatioThreshold:0.6
+            Verbosity:1
             }
         }
     # Note: Image filters can be used to remove images that satisfy certain requirements, e.g. seem to be an empty image.
