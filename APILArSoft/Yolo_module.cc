@@ -50,6 +50,8 @@
 #include "LArCaffe/LArCaffeUtils.h"
 #include "FilterBase.h"
 
+#include "TTree.h" // ROOT
+
 const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
 
 class Yolo;
@@ -89,7 +91,7 @@ public:
 
 private:
 
-  std::vector<larcaffe::RangeArray_t> ImageArray(const art::Event& e);
+  std::vector<larcaffe::RangeArray_t> setEventCrop(const art::Event& e);
   std::vector<larcaffe::RangeArray_t> findBoundingBoxes(const art::Event& e);
   void getMCTruth( art::Event const & e );
 
@@ -108,7 +110,7 @@ private:
   std::vector< larcaffe::supera::FilterBase* > _filter_list;
 
   // ROOT tree members
-  void setupTrees();
+  void setupTrees( int nplanes );
 
   TTree* m_ImageTree;
   std::vector<short>** m_planeImages; //< [planeid][row-major 2D image]
@@ -322,8 +324,8 @@ void Yolo::getMCTruth( art::Event const & e ) {
   
   // GENIE data to get interaction mode and neutrino energy if possible
   art::Handle< std::vector<simb::GTruth> > genietruth;
-  art::Handle( "generator", genietruth );
-  if ( !genietruth.isValid() ) {
+  e.getByLabel( "generator", genietruth );
+  if ( !(*genietruth).isValid() ) {
     _logger.LOG(::larcaffe::msg::kINFO, __FUNCTION__,__LINE__) << "No GENIE Truth. Must be Cosmic Event" << std::endl;
     m_flavor = -1;
     m_mode = -1;
@@ -331,16 +333,17 @@ void Yolo::getMCTruth( art::Event const & e ) {
     return;
   }
 
-  if ( genietruth.size()!=1 ) {
+  std::vector<simb::GTruth>& const genie = *genietruth;
+  if ( genie.size()!=1 ) {
     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Unexpected number of GTruth objectS" << std::endl;
     throw ::larcaffe::larbys();
   }
-  m_mode = genietruth.at(0).fGint;
-  m_nuscatter = genietruth.at(0).fGscatter;
-  m_flavor = genietruth.at(0).fProbePDG; // a guess
+  m_mode = genie.at(0).fGint;
+  m_nuscatter = genie.at(0).fGscatter;
+  m_flavor = genie.at(0).fProbePDG; // a guess
 
   // Get neutrino energy
-  m_Enu = genietruth.at(0).fProbeP4.E();
+  m_Enu = genie.at(0).fProbeP4.E();
 
 }
 
@@ -384,17 +387,17 @@ void Yolo::analyze(art::Event const & e)
   auto bboxes = findBoundingBoxes(e);
   for ( auto const& range : bboxes ) {
     // (x,y) = (wire, time 0toX)
-    m_UpLeft[0] = range.at(1).at(0);
-    m_UpLeft[1] = range.at(0).at(1);
+    m_UpLeft[0] = range.at(1).first;
+    m_UpLeft[1] = range.at(0).second;
 
-    m_LoLeft[0] = range.at(1).at(0);
-    m_LoLeft[1] = range.at(0).at(0);
+    m_LoLeft[0] = range.at(1).first;
+    m_LoLeft[1] = range.at(0).first;
 
-    m_UpRight[0] = range.at(1).at(1);
-    m_UpRight[1] = range.at(0).at(1);
+    m_UpRight[0] = range.at(1).second;
+    m_UpRight[1] = range.at(0).second;
 
-    m_LoRight[0] = range.at(1).at(1);
-    m_LoRight[1] = range.at(0).at(0);
+    m_LoRight[0] = range.at(1).second;
+    m_LoRight[1] = range.at(0).first;
     
     m_BBTree->Fill();
   }
@@ -444,7 +447,7 @@ void Yolo::analyze(art::Event const & e)
 	    unsigned int ch = wf.Channel();
 	    auto const wire_id = geom->ChannelToWire(ch).front();
 	    if(wf.NADC() <= time_range.second) {
-	      logger().LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
+	      _logger().LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
 		<< "Found an waveform length " << wf.NADC()
 		<< " which is shorter than set limit max " << time_range.second
 		<< std::endl;
