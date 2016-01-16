@@ -141,7 +141,6 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   , _cropper_type((CropperType_t)(p.get<unsigned short>("CropperType")))
   , _logger("Yolo")
   , _plane_enable_v(p.get<std::vector<bool> >("EnablePlane"))
-  , _nfills_before_write(0)
   , _producer_v(p.get<std::vector<std::string> >("Producers"))
   , _time_prof_v(kTIMEPROFCATEGORYMAX,0.)
   , _event_counter(0)
@@ -159,7 +158,7 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   // set verbosity
   ::larcaffe::msg::Level_t vlevel = (larcaffe::msg::Level_t)(p.get<unsigned short>("Verbosity",1));
   _logger.set(vlevel);
-  _lar_api.set_verbosity(vlevel);
+  //_lar_api.set_verbosity(vlevel);
   _cropper.set_verbosity(vlevel);
 
   // setup tree
@@ -325,7 +324,7 @@ void Yolo::getMCTruth( art::Event const & e ) {
   // GENIE data to get interaction mode and neutrino energy if possible
   art::Handle< std::vector<simb::GTruth> > genietruth;
   e.getByLabel( "generator", genietruth );
-  if ( !(*genietruth).isValid() ) {
+  if ( !genietruth.isValid() ) {
     _logger.LOG(::larcaffe::msg::kINFO, __FUNCTION__,__LINE__) << "No GENIE Truth. Must be Cosmic Event" << std::endl;
     m_flavor = -1;
     m_mode = -1;
@@ -333,7 +332,7 @@ void Yolo::getMCTruth( art::Event const & e ) {
     return;
   }
 
-  std::vector<simb::GTruth>& const genie = *genietruth;
+  const std::vector<simb::GTruth>& genie = *genietruth;
   if ( genie.size()!=1 ) {
     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Unexpected number of GTruth objectS" << std::endl;
     throw ::larcaffe::larbys();
@@ -447,7 +446,7 @@ void Yolo::analyze(art::Event const & e)
 	    unsigned int ch = wf.Channel();
 	    auto const wire_id = geom->ChannelToWire(ch).front();
 	    if(wf.NADC() <= time_range.second) {
-	      _logger().LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
+	      _logger.LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
 		<< "Found an waveform length " << wf.NADC()
 		<< " which is shorter than set limit max " << time_range.second
 		<< std::endl;
@@ -459,11 +458,10 @@ void Yolo::analyze(art::Event const & e)
 	    if (!inrange )
 	      continue;
 
-	    img( 0, wire_id.Wire - wire_range.first,
-		 (short*)(&(wf.ADCs()[time_range.first])),
-		 time_range.second - time_range.first+1 );
+	    img.copy( 0, wire_id.Wire - wire_range.first,
+		      (short*)(&(wf.ADCs()[time_range.first])),
+		      time_range.second - time_range.first+1 );
 
-	    
 	  }//end of wire loop
 
 	  // filter: add the ability to reject images
