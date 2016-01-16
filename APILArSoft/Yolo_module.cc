@@ -37,10 +37,12 @@
 
 #include <TStopwatch.h>
 
-#include "Geometry/Geometry.h"
-#include "Utilities/DetectorProperties.h"
-#include "RawData/RawDigit.h"
-#include "Simulation/SimChannel.h"
+#include "Geometry/Geometry.h" //LArCore
+#include "Utilities/DetectorProperties.h" // LArData
+#include "RawData/RawDigit.h" // LArData
+#include "Simulation/SimChannel.h" // LArSim
+#include "SimulationBase/GTruth.h" // NuTools
+
 #include "ConverterAPI.h"
 #include "SuperaCore/lmdb_converter.h"
 #include "Cropper.h"
@@ -115,6 +117,7 @@ private:
   int m_run; //< run ID
   float m_Enu; //< neutrino energy (0 if cosmic)
   int m_mode; //< interaction mode (-1 if cosmic)
+  int m_nuscatter; // neutrino scattering code
   int m_flavor; //< neutrino flavor (-1 if cosmic)
   int m_nticks; //< image height in time ticks
   int m_wires;  //< image width in wires
@@ -125,7 +128,7 @@ private:
   short m_UpRight[2];
   short m_LoRight[2];
   short m_LoLeft[2];
-  char m_label[20];
+  char m_label[50];
   
 
 
@@ -317,7 +320,30 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
 void Yolo::getMCTruth( art::Event const & e ) {
   // Sets the MC truth variables to be stored in m_ImageTree
   
+  // GENIE data to get interaction mode and neutrino energy if possible
+  art::Handle< std::vector<simb::GTruth> > genietruth;
+  art::Handle( "generator", genietruth );
+  if ( !genietruth.isValid() ) {
+    _logger.LOG(::larcaffe::msg::kINFO, __FUNCTION__,__LINE__) << "No GENIE Truth. Must be Cosmic Event" << std::endl;
+    m_flavor = -1;
+    m_mode = -1;
+    m_Enu = 0.0;
+    return;
+  }
+
+  if ( genietruth.size()!=1 ) {
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Unexpected number of GTruth objectS" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  m_mode = genietruth.at(0).fGint;
+  m_nuscatter = genietruth.at(0).fGscatter;
+  m_flavor = genietruth.at(0).fProbePDG; // a guess
+
+  // Get neutrino energy
+  m_Enu = genietruth.at(0).fProbeP4.E();
+
 }
+
 		   
 
 void Yolo::analyze(art::Event const & e)
@@ -338,15 +364,40 @@ void Yolo::analyze(art::Event const & e)
   if(_logger.info())
     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracted " << region_v.size() << " images!" << std::endl;
 
+  // Event Code
+  m_event  = (int)e.event();
+  m_run    = (int)e.run();
+  m_subrun = (int)e.subRun();
+
+  // Get MC Truth
+  getMCTruth( e );
+  
+  // Label
+  if ( m_mode==-1 )
+    sprintf(m_label, "%d_%d_%d_cosmic", m_run, m_subrun, m_event );
+  else
+    sprintf(m_label, "%d_%d_%d_nu_%d", m_run, m_subrun, m_event, m_mode );
+
   //
   // Determine bounding boxes
   //
   auto bboxes = findBoundingBoxes(e);
+  for ( auto const& range : bboxes ) {
+    // (x,y) = (wire, time 0toX)
+    m_UpLeft[0] = range.at(1).at(0);
+    m_UpLeft[1] = range.at(0).at(1);
 
-  //
-  // Collect MCTruth Info
-  //
-  getMCTruth(e);
+    m_LoLeft[0] = range.at(1).at(0);
+    m_LoLeft[1] = range.at(0).at(0);
+
+    m_UpRight[0] = range.at(1).at(1);
+    m_UpRight[1] = range.at(0).at(1);
+
+    m_LoRight[0] = range.at(1).at(1);
+    m_LoRight[1] = range.at(0).at(0);
+    
+    m_BBTree->Fill();
+  }
 
   //
   // Save region image
@@ -384,7 +435,34 @@ void Yolo::analyze(art::Event const & e)
 	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
 
 	  // copy data into image
+	  m_nticks = time_range.second-time_range.first+1;
+	  m_wires  = wire_range.second-wire_range.first+1;
 	  
+	  larcaffe::Image img( m_nticks, m_wires );
+	  
+	  for ( auto const& wf : *digitVecHandle ) {
+	    unsigned int ch = wf.Channel();
+	    auto const wire_id = geom->ChannelToWire(ch).front();
+	    if(wf.NADC() <= time_range.second) {
+	      logger().LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
+		<< "Found an waveform length " << wf.NADC()
+		<< " which is shorter than set limit max " << time_range.second
+		<< std::endl;
+	      throw ::larcaffe::larbys();
+	    }
+	    
+	    bool inrange = (  wire_range.first <= wire_id.Wire && wire_range.second >= wire_id.Wire );
+
+	    if (!inrange )
+	      continue;
+
+	    img( 0, wire_id.Wire - wire_range.first,
+		 (short*)(&(wf.ADCs()[time_range.first])),
+		 time_range.second - time_range.first+1 );
+
+	    
+	  }//end of wire loop
+
 	  // filter: add the ability to reject images
 	  bool keep = true;
 	  for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
@@ -398,140 +476,37 @@ void Yolo::analyze(art::Event const & e)
 	  }
 
 	  // compress image and bounding boxes
-	  
+	  if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
+	    img.compress( _cropper.TargetHeight(), _cropper.TargetWidth() );
+	  }
+
 	  // transfer image to ROOT variables
+	  m_planeImages[plane].resize( img.height()*img.width() );
+	  for ( int w=0; w<img.width(); w++) {
+	    for (int t=0; t<img.height(); t++) {
+	      m_planeImages[plane].at( img.height()*w + t ) = img.pixel( t, w );
+	    }
+	  }
 
-	  // fill tree
+	}//end of loop over planes
 
-	  std::cout<<"image " << range_index << " @ " << plane << "saved..." << std::endl;
-	  // cout about bounding boxes
-	}
-      }
-    }
-  }
+	// fill tree
+	
+	std::cout<<"image " << range_index << " @ " << plane << "saved..." << std::endl;
+	// cout about bounding boxes
 
-  // deal with these later
-//   if(!_producer_v[1].empty()) {
-//     if(_logger.info())
-//       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Wire... " << std::endl;
+      }// end of image crop ranges
+    }//if tests ok
 
-//     pWatchLArIO.Start();
-//     art::Handle< std::vector<recob::Wire> > wireVecHandle;
-//     e.getByLabel(_producer_v[1], wireVecHandle);
-//     _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
-//     if ( !wireVecHandle.isValid() )
-//       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
-// 	<< "Missing Wires by " << _producer_v[1]<< " Skipping." << std::endl;
-//     else if ( wireVecHandle->empty() )
-//       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Wires info. skipping." << std::endl;
-//     else {
-//       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-// 	<< "Extracting " << region_v.size() << " images for Wire!" << std::endl;      
-//       for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
+    m_ImageTree->Fill();
 
-// 	auto const& range_v = region_v[range_index];
+  }// if RawDigits is available
 
-// 	auto const& time_range = range_v.back();
+  
 
-// 	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
-	  
-// 	  auto& db = _db_v[1][plane];
-// 	  if(!db) continue;
-
-// 	  auto const& wire_range = range_v[plane];
-
-// 	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
-
-// 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
-
-// 	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-// 			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
-// 	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-// 			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
-
-// 	  pWatchDatum.Start();
-// 	  db->set_image_size(time_range.second - time_range.first + 1,
-// 			     wire_range.second - wire_range.first + 1);
-// 	  _lar_api.Copy(*wireVecHandle,*db);
-// 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
-
-// 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
-
-// 	  pWatchDB.Start();
-// 	  db->store_image(tmp_key);
-// 	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
-// 	}
-//       }
-//     }
-//   }
-
-//   if(!_producer_v[2].empty()) {
-//     if(_logger.info())
-//       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Hit... " << std::endl;
-
-//     pWatchLArIO.Start();
-//     art::Handle< std::vector<recob::Hit> > hitVecHandle;
-//     e.getByLabel(_producer_v[1], hitVecHandle);
-//     _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
-
-//     if ( !hitVecHandle.isValid() )
-//       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
-// 	<< "Missing Hits by " << _producer_v[1]<< " Skipping." << std::endl;
-//     else if ( hitVecHandle->empty() )
-//       _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Hits info. skipping." << std::endl;
-//     else {
-//       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-// 	<< "Extracting " << region_v.size() << " images for Hit " << std::endl;
-//       for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
-
-// 	auto const& range_v = region_v[range_index];
-
-// 	auto const& time_range = range_v.back();
-
-// 	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
-	  
-// 	  auto& db = _db_v[2][plane];
-// 	  if(!db) continue;
-
-// 	  auto const& wire_range = range_v[plane];
-
-// 	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
-
-// 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
-
-// 	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-// 			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
-// 	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-// 			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
-
-// 	  pWatchDatum.Start();
-// 	  db->set_image_size(time_range.second - time_range.first + 1,
-// 			     wire_range.second - wire_range.first + 1);
-// 	  _lar_api.Copy(*hitVecHandle,*db);
-// 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
-
-// 	  std::string tmp_key = key_str + "_" + std::to_string(range_index);
-
-// 	  pWatchDB.Start();
-// 	  db->store_image(tmp_key);
-// 	  _time_prof_v[kIO_DB] += pWatchDB.RealTime();
-// 	}
-//       }
-//     }
-//   }
-
-//   ++_nfills_before_write;
-//   if(_nfills_before_write && _nfills_before_write%100 == 0) {
-
-//     if(_logger.info())
-//       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Writing output... " << std::endl;    
-//     pWatchDB.Start();
-//     for(auto& p_v : _db_v) 
-//       for(auto& p : p_v) 
-// 	if(p) p->write();
-//     _time_prof_v[kIO_DB] += pWatchDB.RealTime();
-//   }
-
+  // deal with using Wire or Hits later
+  // Code goes here
+  
   _time_prof_v[kANALYZE_TOTAL] += pWatchAnalyze.RealTime();
   _event_counter += 1;
 }
@@ -592,6 +567,7 @@ void Yolo::endJob() {
     m_ImageTree->Branch( "event", &m_event, "event/I" );
     m_ImageTree->Branch( "Enu", &m_Enu, "Enu/F" );
     m_ImageTree->Branch( "mode", &m_mode, "mode/I" );
+    m_ImageTree->Branch( "nuscatter", &m_nuscatter, "nuscatter/I" );
     m_ImageTree->Branch( "flavor", &m_flavor, "flavor/I" );
     m_ImageTree->Branch( "nticks", &m_nticks, "nticks/I" );
     m_ImageTree->Branch( "nwires", &m_wires, "nwires/I" );
@@ -602,7 +578,7 @@ void Yolo::endJob() {
     m_BBTree->Branch( "UpRight", m_UpRight, "UpRight[2]/S" );
     m_BBTree->Branch( "LoRight", m_LoRight, "LoRight[2]/S" );
     m_BBTree->Branch( "LoLeft", m_LoLeft, "LoLeft[2]/S" );
-    m_BBTree->Branch( "label", m_label, "label[20]/C" );
+    m_BBTree->Branch( "label", m_label, "label[50]/C" );
 
   }
 }
