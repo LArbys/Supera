@@ -27,12 +27,14 @@ namespace larcaffe {
     Image(const Image& rhs);
     virtual ~Image(){}
 
+    typedef enum { kSum, kAverage, kMaxPool } CompressionModes_t;
+
     unsigned int height() const { return fHeight; }
     unsigned int width()  const { return fWidth;  }
     float pixel(size_t h, size_t w) const;
     inline bool  isInBounds( size_t h, size_t w ) const
     { return ( h < fHeight && w < fWidth ); }
-    Image copy_compress(size_t height, size_t width) const;
+    Image copy_compress(size_t height, size_t width, CompressionModes_t mode=kSum) const;
     size_t index( size_t height, size_t width ) const;
 
     void copy(size_t h, size_t w, const float* src, size_t num_pixel);
@@ -45,7 +47,8 @@ namespace larcaffe {
     void set_pixel( size_t h, size_t w, float value );
     void paint(float value);
     void clear_data();
-    void compress(size_t height, size_t width);
+    void compress(size_t height, size_t width, CompressionModes_t mode=kSum);
+    
 
   private:
     unsigned int fHeight;
