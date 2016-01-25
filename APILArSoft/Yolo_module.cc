@@ -567,23 +567,32 @@ void Yolo::analyze(art::Event const & e)
       //
       auto bboxes = findBoundingBoxes(e);
       // each interaction has bounding boxes in each plane
+      auto const& the_range_v = region_v[0];
+      
       for ( auto const& range : bboxes ) {
 	// range is a RangeArray_t which is a vector< pair<int,int> >
 	// (x,y) = (wire, time 0toX)
 	for (int plane=0; plane<fNPlanes; plane++) {
 	  // need to account for compression
 	  // bounding box goes counter clockwise from origin
-	  m_plane_bb_loleft_t[plane]->push_back( range[fNPlanes].first/plane_compression[fNPlanes] );
-	  m_plane_bb_loleft_w[plane]->push_back( range[plane].first/plane_compression[plane] );
 
-	  m_plane_bb_loright_t[plane]->push_back( range[fNPlanes].first/plane_compression[fNPlanes] );
-	  m_plane_bb_loright_w[plane]->push_back( range[plane].second/plane_compression[plane] );
+	  std::cout << "[Plane " << plane << " BBOX]"
+		    << " t=[" << range[fNPlanes].first << ", " << range[fNPlanes].second << "]"
+		    << " w=[" << range[plane].first << ", " << range[plane].second << "]"
+		    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
+		    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
 
-	  m_plane_bb_hiright_t[plane]->push_back( range[fNPlanes].second/plane_compression[fNPlanes] );
-	  m_plane_bb_hiright_w[plane]->push_back( range[plane].second/plane_compression[plane] );
+	  m_plane_bb_loleft_t[plane]->push_back( (int)((int)range[fNPlanes].first-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
+	  m_plane_bb_loleft_w[plane]->push_back( (int)(range[plane].first-the_range_v[plane].first)/plane_compression[plane] );
 
-	  m_plane_bb_hileft_t[plane]->push_back( range[fNPlanes].second/plane_compression[fNPlanes] );
-	  m_plane_bb_hileft_w[plane]->push_back( range[plane].first/plane_compression[plane] );
+	  m_plane_bb_loright_t[plane]->push_back( (int)((int)range[fNPlanes].first-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
+	  m_plane_bb_loright_w[plane]->push_back( (int)(range[plane].second-the_range_v[plane].first)/plane_compression[plane] );
+
+	  m_plane_bb_hiright_t[plane]->push_back( (int)((int)range[fNPlanes].second-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
+	  m_plane_bb_hiright_w[plane]->push_back( (range[plane].second-the_range_v[plane].first)/plane_compression[plane] );
+
+	  m_plane_bb_hileft_t[plane]->push_back( (int)((int)range[fNPlanes].second-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
+	  m_plane_bb_hileft_w[plane]->push_back( (int)(range[plane].first-the_range_v[plane].first)/plane_compression[plane] );
 	}//end of planes loop to fill bounding boxes
       }//end of sets of bounding boxes for a given interaction
       

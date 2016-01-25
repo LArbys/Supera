@@ -54,6 +54,18 @@ namespace larcaffe {
       for(auto const& mct : mct_v) {
 	
 	auto boundary = WireTimeBoundary(mct);
+
+	// check if empty
+	bool isempty = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    isempty = false;
+	    break;
+	  }
+	}
+
+	if ( isempty )
+	  continue;
 	
 	for(size_t i=0; i<result.size(); ++i) {
 	  
@@ -83,7 +95,7 @@ namespace larcaffe {
       art::ServiceHandle<util::LArProperties> larp;
       art::ServiceHandle<util::DetectorProperties> detp;
       art::ServiceHandle<util::TimeService> ts;
-      const double drift_velocity = larp->DriftVelocity() * 1.e3; // make it nano-sec/cm
+      const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns
       const int tick_max = detp->NumberTimeSamples();
       double xyz[3] = {0.};
       
@@ -119,7 +131,17 @@ namespace larcaffe {
 	  catch(...) {continue;}
 
 	}
-	//std::cout<<xyz[0]<<" : "<<step.T()<<" ... "<<tick<<std::endl;
+	std::cout<< "x=" << xyz[0]
+		 <<" : t="<<step.T() << " ns"
+		 <<" v=" << drift_velocity 
+		 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
+		 << " tick=" << tick
+		 << " ... "
+		 << " z=" << xyz[2]
+		 << " wire=" << geom->NearestWireID(xyz, 2) 
+		 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+		 << std::endl;
+
       }
       
       for(auto& r : result) 
