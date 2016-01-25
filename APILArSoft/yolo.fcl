@@ -15,10 +15,10 @@ yolo: {
     # A hard-cut limit for outer edge of an image. A range is specified by [min,max] pair for each plane and time.
     # The last element is for the time and other elements respect plane ID. Length should be # planes + 1 for 
     # used geometry.
-    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[1,8960]]
+    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[3175,7654]]
     # Cropping configuration
     CropperConfig: { 
-        TimePadding:100     # Padding for time
+        TimePadding:10      # Padding for time
         WirePadding:10      # Padding for wire
         TimeTargetSize:448  # Target image width size (wire)
         WireTargetSize:448  # Target image height size (time)

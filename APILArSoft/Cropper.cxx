@@ -131,16 +131,16 @@ namespace larcaffe {
 	  catch(...) {continue;}
 
 	}
-	std::cout<< "x=" << xyz[0]
-		 <<" : t="<<step.T() << " ns"
-		 <<" v=" << drift_velocity 
-		 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
-		 << " tick=" << tick
-		 << " ... "
-		 << " z=" << xyz[2]
-		 << " wire=" << geom->NearestWireID(xyz, 2) 
-		 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
-		 << std::endl;
+	// std::cout<< "x=" << xyz[0]
+	// 	 <<" : t="<<step.T() << " ns"
+	// 	 <<" v=" << drift_velocity 
+	// 	 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
+	// 	 << " tick=" << tick
+	// 	 << " ... "
+	// 	 << " z=" << xyz[2]
+	// 	 << " wire=" << geom->NearestWireID(xyz, 2) 
+	// 	 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	// 	 << std::endl;
 
       }
       
@@ -222,6 +222,23 @@ namespace larcaffe {
     {
       art::ServiceHandle<util::DetectorProperties> detp;
       art::ServiceHandle<geo::Geometry> geom;
+
+      // we check the quality of Range_t
+      // if empty we return empty range
+      // if inconsistent we throw
+
+      // never filled
+      if ( range.first==larcaffe::kINVALID_UINT && range.second==0 ) {
+	Range_t emptyrange;
+	emptyrange.first = emptyrange.second = 0;
+	return emptyrange;
+      }
+      if ( range.first==0 && range.second==0 ) {
+	Range_t emptyrange;
+	emptyrange.first = emptyrange.second = 0;
+        return emptyrange;
+      }
+
       if(range.second < range.first) {
 	logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
 	  << "Inconsistent boundary given: max (" << range.second << ") < min (" << range.first << ") !" << std::endl;

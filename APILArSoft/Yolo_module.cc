@@ -126,6 +126,7 @@ private:
   int* m_wires;  //< image width in wires [planeid]
   int fNPlanes; //< number of wire planes
   bool fGroupAllInteractions;
+  bool fCosmicsMode;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
   std::vector<int>** m_plane_bb_loleft_t;
@@ -228,6 +229,7 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
 
   // group all interactions into one big bounding box (for neutrino mode)
   fGroupAllInteractions = p.get<bool>( "GroupAllInteractions", false );
+  fCosmicsMode = p.get<bool>( "CosmicsMode", false );
 
   // cropper hard limit (dependent on cropper params)
   std::vector<std::pair<int,int> > range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitRange");
@@ -321,6 +323,11 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
   for(auto const& mct : *mctHandle) {
     
     std::cout << "mctrack: id=" << mct.TrackID() << " pdg=" << mct.PdgCode() << " " << mct.Process() << " parent=" << mct.AncestorTrackID()  << std::endl;
+    if ( fCosmicsMode ) {
+      // we skip the neutrons for now, else its a fucking mess -- if we get smarter, could be interesting
+      if ( mct.PdgCode()==2112 )
+	continue;
+    }
 
     if ( fGroupAllInteractions ) {
       // look to see if ancestor in map
@@ -491,8 +498,11 @@ void Yolo::analyze(art::Event const & e)
 	      throw ::larcaffe::larbys();
 	    }
 	    
+	    if ( wire_id.Plane!=plane )
+	      continue;
+
 	    bool inrange = (wire_range.first <= wire_id.Wire) && (wire_range.second >= wire_id.Wire);
-	    //std::cout << "wire " << wire_id.Wire  << " in range: " << inrange << std::endl;
+	    //std::cout << "plane " << plane << ": ch=" << ch << " wire " << wire_id.Wire  << " in range: " << inrange << std::endl;
 	    if (!inrange )
 	      continue;
 
@@ -509,7 +519,7 @@ void Yolo::analyze(art::Event const & e)
 	    
 	  }//end of wire loop
 
-	  // check image
+	  //check image
 	  // std::cout << "[Check Pre-Compressed Image]" << std::endl;
 	  // for (int t=0; t<(int)(time_range.second-time_range.first+1);t++) {
 	  //   std::cout << img.pixel( t, 1 ) << " ";
@@ -572,27 +582,48 @@ void Yolo::analyze(art::Event const & e)
       for ( auto const& range : bboxes ) {
 	// range is a RangeArray_t which is a vector< pair<int,int> >
 	// (x,y) = (wire, time 0toX)
+
+	// stay within bounds
+	if ( range[fNPlanes].second<the_range_v[fNPlanes].first 
+	     || range[fNPlanes].first>the_range_v[fNPlanes].second )
+	  continue;
+
+	// calculate time bounds in cropped images coordinates
+	int t_lo = (int)range[fNPlanes].first  - (int)the_range_v[fNPlanes].first;
+	int t_hi = (int)range[fNPlanes].second - (int)the_range_v[fNPlanes].first;
+
+	// enforce time bounds
+	t_lo = std::max( t_lo, 0 );
+	t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].second-(int)the_range_v[fNPlanes].first );
+
 	for (int plane=0; plane<fNPlanes; plane++) {
 	  // need to account for compression
 	  // bounding box goes counter clockwise from origin
 
+	  int w_lo = (int)range[plane].first  - (int)the_range_v[plane].first;
+	  int w_hi = (int)range[plane].second - (int)the_range_v[plane].first;
+
+	  // enforce image bounds
+	  w_lo = std::max( w_lo, 0 );
+	  w_hi = std::min( w_hi, (int)the_range_v[plane].second-(int)the_range_v[plane].first);
+
 	  std::cout << "[Plane " << plane << " BBOX]"
-		    << " t=[" << range[fNPlanes].first << ", " << range[fNPlanes].second << "]"
-		    << " w=[" << range[plane].first << ", " << range[plane].second << "]"
+		    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
+		    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
 		    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
 		    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
 
-	  m_plane_bb_loleft_t[plane]->push_back( (int)((int)range[fNPlanes].first-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
-	  m_plane_bb_loleft_w[plane]->push_back( (int)(range[plane].first-the_range_v[plane].first)/plane_compression[plane] );
-
-	  m_plane_bb_loright_t[plane]->push_back( (int)((int)range[fNPlanes].first-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
-	  m_plane_bb_loright_w[plane]->push_back( (int)(range[plane].second-the_range_v[plane].first)/plane_compression[plane] );
-
-	  m_plane_bb_hiright_t[plane]->push_back( (int)((int)range[fNPlanes].second-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
-	  m_plane_bb_hiright_w[plane]->push_back( (range[plane].second-the_range_v[plane].first)/plane_compression[plane] );
-
-	  m_plane_bb_hileft_t[plane]->push_back( (int)((int)range[fNPlanes].second-(int)the_range_v[fNPlanes].first)/plane_compression[fNPlanes] );
-	  m_plane_bb_hileft_w[plane]->push_back( (int)(range[plane].first-the_range_v[plane].first)/plane_compression[plane] );
+	  m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+	  m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
+	  
+	  m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+	  m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
+	  
+	  m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+	  m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
+	  
+	  m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+	  m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
 	}//end of planes loop to fill bounding boxes
       }//end of sets of bounding boxes for a given interaction
       
