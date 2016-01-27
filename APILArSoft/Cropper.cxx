@@ -338,8 +338,9 @@ namespace larcaffe {
 	  result.second = target_width * (((int)(range.second) + padding) / target_width);
 	  if(result.second < range.second) result.second += target_width;
 	  if((int)(result.second) >= max) result.second -= target_width;
+	  result.second -= 1;
 	}
-	else result.second = target_width * _compression_factor;
+	else result.second = target_width * _compression_factor - 1;
 	
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 

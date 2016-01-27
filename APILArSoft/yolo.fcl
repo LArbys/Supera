@@ -16,12 +16,20 @@ yolo: {
     # The last element is for the time and other elements respect plane ID. Length should be # planes + 1 for 
     # used geometry.
     HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[3175,7654]]
-    # Cropping configuration
-    CropperConfig: { 
+    # Cropping configurations
+    EventCropperConfig: { 
         TimePadding:10      # Padding for time
         WirePadding:10      # Padding for wire
         TimeTargetSize:448  # Target image width size (wire)
         WireTargetSize:448  # Target image height size (time)
+        CompressionFactor:0 # Compression factor (see note below)
+        }
+    # Cropping configuration
+    InteractionCropperConfig: { 
+        TimePadding:10      # Padding for time
+        WirePadding:10      # Padding for wire
+        TimeTargetSize:224  # Target image width size (wire)
+        WireTargetSize:224  # Target image height size (time)
         CompressionFactor:0 # Compression factor (see note below)
         }
     # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)

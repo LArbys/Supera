@@ -33,3 +33,5 @@ physics:
  end_paths:     [ analyzeIt ]
 }
 
+physics.analyzers.yolo.GroupAllInteractions: true
+physics.analyzers.yolo.CosmicsMode: false

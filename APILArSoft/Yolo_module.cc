@@ -34,6 +34,7 @@
 
 #include <limits>
 #include <climits>
+#include <set>
 
 #include <TStopwatch.h>
 
@@ -42,6 +43,8 @@
 #include "RawData/RawDigit.h" // LArData
 #include "Simulation/SimChannel.h" // LArSim
 #include "SimulationBase/GTruth.h" // NuTools
+#include "MCBase/MCTrack.h" // LArData
+#include "MCBase/MCShower.h" // LArData
 
 #include "ConverterAPI.h"
 #include "SuperaCore/lmdb_converter.h"
@@ -49,6 +52,7 @@
 #include "LArCaffe/larbys.h"
 #include "LArCaffe/LArCaffeUtils.h"
 #include "FilterBase.h"
+#include "ImageExtractor.h"
 
 #include "TTree.h" // ROOT
 
@@ -100,6 +104,7 @@ private:
   //std::vector<std::vector<larcaffe::supera::converter_base*> > _db_v;
   //::larcaffe::supera::ConverterAPI _lar_api;
   ::larcaffe::supera::Cropper _cropper;
+  ::larcaffe::supera::Cropper _cropper_interaction;
   CropperType_t _cropper_type;
   ::larcaffe::logger _logger;
   ::larcaffe::RangeArray_t _wiretime_range_hard_v;
@@ -114,10 +119,12 @@ private:
   void setupTrees( int nplanes );
 
   TTree* m_ImageTree;
+  TTree* m_BBTree;
   std::vector<int>** m_planeImages; //< [planeid][row-major 2D image]
   int m_event; //< event ID
   int m_subrun; //< subrun ID
   int m_run; //< run ID
+  int m_nfilledboxes;
   float m_Enu; //< neutrino energy (0 if cosmic)
   int m_mode; //< interaction mode (-1 if cosmic)
   int m_nuscatter; // neutrino scattering code
@@ -129,6 +136,8 @@ private:
   bool fCosmicsMode;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
+  
+  // for events
   std::vector<int>** m_plane_bb_loleft_t;
   std::vector<int>** m_plane_bb_loleft_w;
   std::vector<int>** m_plane_bb_hileft_t;
@@ -137,17 +146,20 @@ private:
   std::vector<int>** m_plane_bb_loright_w;
   std::vector<int>** m_plane_bb_hiright_t;
   std::vector<int>** m_plane_bb_hiright_w;
+  std::vector<std::string>* m_bbox_label;
+  std::vector<int>** m_bb_planeImages;
   char m_label[50];
 
-  // TTree* m_BBTree; // bouding box tree
-  // // bounding box coorindates [plane][x,y]
-  // int m_bbplane; //< bounding box plane
-  // short m_UpLeft[2];
-  // short m_UpRight[2];
-  // short m_LoRight[2];
-  // short m_LoLeft[2];
-
+  // for individual bounding boxes
+  int* m_plane_bbinteraction_loleft_t;
+  int* m_plane_bbinteraction_loleft_w;
+  int* m_plane_bbinteraction_hiright_t;
+  int* m_plane_bbinteraction_hiright_w;
+  char m_bblabel[100];
+  int m_bb_nticks;
+  int m_bb_nwires;
   
+  std::vector< std::string > m_interaction_list; ///< labels for bounding boxes
 
 
 };
@@ -179,20 +191,25 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
 
   // setup tree
   art::ServiceHandle<art::TFileService> ana_file;
-  m_ImageTree = ana_file->make<TTree>( "imgtree", "Tree Containing Image and its MC Truth Info" );
-  //m_BBTree = ana_file->make<TTree>( "bbtree", "Bounding Box Tree and its label" );
+  m_ImageTree = ana_file->make<TTree>( "imgtree", "Tree Containing Image and its MC Truth Info" );  // image of the entire event
+  m_BBTree    = ana_file->make<TTree>( "bbtree", "Bounding Box Tree and its label" ); // images of each interaction within events
   
   // Allocate vectors for planes
   m_planeImages = new std::vector<int>*[fNPlanes];
   for (int p=0; p<fNPlanes; p++) {
     m_planeImages[p] = new std::vector<int>;
   }
+  m_bb_planeImages = new std::vector<int>*[fNPlanes];
+  for (int p=0; p<fNPlanes; p++) {
+    m_bb_planeImages[p] = new std::vector<int>;
+  }
 
   // setup branches
   setupTrees( fNPlanes );
 
   // cropper parameters
-  fhicl::ParameterSet cropper_params = p.get<fhicl::ParameterSet>("CropperConfig");
+  fhicl::ParameterSet cropper_params = p.get<fhicl::ParameterSet>("EventCropperConfig");
+  fhicl::ParameterSet interaction_cropper_params = p.get<fhicl::ParameterSet>("InteractionCropperConfig");
 							       
   if(cropper_params.is_empty()) {
     if(_cropper_type != kNoCropper) {
@@ -205,7 +222,9 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
 	<< "There will be no cropping done for this process." << std::endl;
     }
   }else {
-    // attempt to fill the parameters
+    // fill cropper parameters
+
+    // event cropper
     std::vector<unsigned int> cropper_config;
     cropper_config.push_back( cropper_params.get< unsigned int >( "TimePadding" ) );
     cropper_config.push_back( cropper_params.get< unsigned int >( "WirePadding" ) );
@@ -221,12 +240,32 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
 			 cropper_config[4]);
     }else{
       _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
-	<< "Unexpected length of cropper configuration (length=" << cropper_config.size() 
+	<< "Unexpected length of event cropper configuration (length=" << cropper_config.size() 
+	<< ") ... must be length 5 unsigned int array" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+
+    cropper_config.clear();
+    cropper_config.push_back( interaction_cropper_params.get< unsigned int >( "TimePadding" ) );
+    cropper_config.push_back( interaction_cropper_params.get< unsigned int >( "WirePadding" ) );
+    cropper_config.push_back( interaction_cropper_params.get< unsigned int >( "TimeTargetSize" ) );
+    cropper_config.push_back( interaction_cropper_params.get< unsigned int >( "WireTargetSize" ) );
+    cropper_config.push_back( interaction_cropper_params.get< unsigned int >( "CompressionFactor" ) );
+    if(cropper_config.size()==5){
+      // we got them all. setup the cropper.
+      _cropper_interaction.configure(cropper_config[0],
+				     cropper_config[1],
+				     cropper_config[2],
+				     cropper_config[3],
+				     cropper_config[4]);
+    }else{
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+	<< "Unexpected length of interaction cropper configuration (length=" << cropper_config.size() 
 	<< ") ... must be length 5 unsigned int array" << std::endl;
       throw ::larcaffe::larbys();
     }
   }//end of if cropper_param not empty
-
+  
   // group all interactions into one big bounding box (for neutrino mode)
   fGroupAllInteractions = p.get<bool>( "GroupAllInteractions", false );
   fCosmicsMode = p.get<bool>( "CosmicsMode", false );
@@ -317,9 +356,18 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
     throw ::larcaffe::larbys();
   }
-   
+  art::Handle<std::vector<sim::MCShower>> mcshHandle;
+  e.getByLabel("mcreco",mcshHandle);
+  if(!mcshHandle.isValid()) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  
   // create sets of interactions
+
+  // start with tracks
   std::map<unsigned int,std::vector<sim::MCTrack> > interaction_m;
+
   for(auto const& mct : *mctHandle) {
     
     std::cout << "mctrack: id=" << mct.TrackID() << " pdg=" << mct.PdgCode() << " " << mct.Process() << " parent=" << mct.AncestorTrackID()  << std::endl;
@@ -349,14 +397,55 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
   }
 
   _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Made " << interaction_m.size() << " interaction groups to crop around" << std::endl;
-    
-  // now find bounding box of each interaction
-  for(auto const& int_pair : interaction_m) {
 
-    auto range_array = _cropper.Format(_cropper.WireTimeBoundary(int_pair.second));
+  // get shower info
+  std::set< unsigned int > decaytracks;
+  for(auto const& mcsh : *mcshHandle) {
+    std::cout << "mcshower: id=" << mcsh.TrackID() << " pdg=" << mcsh.PdgCode() << " " << mcsh.Process() << " parent=" << mcsh.AncestorTrackID()  << std::endl;
+    if ( std::string(mcsh.Process())=="Decay" ) {
+      auto ittrack=interaction_m.find( mcsh.AncestorTrackID() );
+      if ( ittrack!=interaction_m.end() ) {
+	// matching
+	decaytracks.insert( mcsh.AncestorTrackID() );
+      }
+    }
+  }
+  
+  // now find bounding box of each interaction
+  m_interaction_list.clear();
+  for(auto const& int_pair : interaction_m) {
+    
+    auto range_array = _cropper_interaction.Format(_cropper_interaction.WireTimeBoundary(int_pair.second));
+
+    // determine what the interaction is
+    std::stringstream ss;
+    if ( !fCosmicsMode ) {
+      ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+    }
+    else {
+      const sim::MCTrack& mct0 = int_pair.second.at(0);
+      if ( std::abs(mct0.PdgCode())==13 ) {
+	// muon
+	ss << "cosmic_muon";
+	if ( int_pair.second.size()>1 ) {
+	  auto itmatch = decaytracks.find( int_pair.first );
+	  if ( itmatch!=decaytracks.end() )
+	    ss << "_decay";
+	}//end of if not single muon only
+      }//end of if muon
+      else if ( std::abs(mct0.PdgCode())==2212 )  {
+	ss << "cosmic_proton";
+      }
+      else if ( std::abs(mct0.PdgCode())==11 ) {
+	ss << "cosmic_shower";
+      }
+      else 
+	ss << "cosmic_other";
+    }//end of if cosmics
+    m_interaction_list.push_back( ss.str() );
 
     auto const& time_range = range_array.back();
-      
+    
     for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
 
       auto const& wire_range = range_array[plane];
@@ -467,6 +556,9 @@ void Yolo::analyze(art::Event const & e)
       std::vector<int> plane_compression;
       plane_compression.resize(fNPlanes+1,1);
 
+      // Make an extractor
+      larcaffe::supera::ImageExtractor extractor;
+
       // loop through cropping regions (should only be one for Yolo Module)
       for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
 
@@ -482,43 +574,11 @@ void Yolo::analyze(art::Event const & e)
 	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
 
 	  // copy data into image
+	  larcaffe::Image img = extractor.Extract( plane, wire_range, time_range, *digitVecHandle );
+
 	  m_nticks = time_range.second-time_range.first+1;
 	  m_wires[plane]  = wire_range.second-wire_range.first+1;
 	  
-	  larcaffe::Image img( m_nticks, m_wires[plane] );
-	  
-	  for ( auto const& wf : *digitVecHandle ) {
-	    unsigned int ch = wf.Channel();
-	    auto const wire_id = geom->ChannelToWire(ch).front();
-	    if(wf.NADC() <= time_range.second) {
-	      _logger.LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
-		<< "Found an waveform length " << wf.NADC()
-		<< " which is shorter than set limit max " << time_range.second
-		<< std::endl;
-	      throw ::larcaffe::larbys();
-	    }
-	    
-	    if ( wire_id.Plane!=plane )
-	      continue;
-
-	    bool inrange = (wire_range.first <= wire_id.Wire) && (wire_range.second >= wire_id.Wire);
-	    //std::cout << "plane " << plane << ": ch=" << ch << " wire " << wire_id.Wire  << " in range: " << inrange << std::endl;
-	    if (!inrange )
-	      continue;
-
-	    // img.copy( 0, wire_id.Wire - wire_range.first,
-	    // 	      (short*)(&(wf.ADCs()[time_range.first])),
-	    // 	      time_range.second - time_range.first+1 );
-	    for (int t=0; t<(int)(time_range.second-time_range.first+1);t++) {
-	      img.set_pixel( t, wire_id.Wire - wire_range.first, (float)wf.ADCs()[time_range.first+t] );
-	      // if ( (wire_id.Wire - wire_range.first)==1 )
-	      // 	std::cout << wf.ADCs()[time_range.first+t] << " ";
-	    }
-	    //if ( (wire_id.Wire - wire_range.first)==1 ) std::cout << std::endl;
-
-	    
-	  }//end of wire loop
-
 	  //check image
 	  // std::cout << "[Check Pre-Compressed Image]" << std::endl;
 	  // for (int t=0; t<(int)(time_range.second-time_range.first+1);t++) {
@@ -578,10 +638,13 @@ void Yolo::analyze(art::Event const & e)
       auto bboxes = findBoundingBoxes(e);
       // each interaction has bounding boxes in each plane
       auto const& the_range_v = region_v[0];
-      
+
+      int ibox = -1;
+      m_nfilledboxes = 0;
       for ( auto const& range : bboxes ) {
 	// range is a RangeArray_t which is a vector< pair<int,int> >
 	// (x,y) = (wire, time 0toX)
+	ibox++;
 
 	// stay within bounds
 	if ( range[fNPlanes].second<the_range_v[fNPlanes].first 
@@ -624,8 +687,34 @@ void Yolo::analyze(art::Event const & e)
 	  
 	  m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
 	  m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
+
+	  // save image for bbox
+	  larcaffe::Image bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
+
+	  // compress image and bounding boxes
+	  if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
+	    bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kAverage );
+	  }
+	  m_bb_nticks = bbimg.height();
+	  m_bb_nwires = bbimg.width();
+
+	  // transfer image to ROOT variables
+	  m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
+	  for ( int w=0; w<(int)bbimg.width(); w++) {
+	    for (int t=0; t<(int)bbimg.height(); t++) {
+	      m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
+	    }
+	  }
+	  
 	}//end of planes loop to fill bounding boxes
-      }//end of sets of bounding boxes for a given interaction
+
+	// save this bbox!
+	m_bbox_label->push_back( m_interaction_list.at(ibox) );
+	sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
+	m_BBTree->Fill();
+	m_nfilledboxes++;
+
+      }//end of loop over sets of bounding boxes for a given interaction
       
       // Finally fill the tree for this event
       m_ImageTree->Fill();
@@ -685,6 +774,7 @@ void Yolo::setupTrees(int nplanes) {
     char branchname[20];
     sprintf( branchname, "img_plane%d", i );
     m_ImageTree->Branch( branchname, &(*m_planeImages[i]) );
+    m_BBTree->Branch( branchname, &(*m_bb_planeImages[i]) );
   }
   m_ImageTree->Branch( "run", &m_run, "run/I" );
   m_ImageTree->Branch( "subrun", &m_subrun, "subrun/I" );
@@ -700,6 +790,14 @@ void Yolo::setupTrees(int nplanes) {
   m_ImageTree->Branch( "nwires", m_wires, chr_mwires );
   m_ImageTree->Branch( "label", m_label, "label[50]/C" );
 
+  // Bounding Box Tree
+  m_BBTree->Branch( "run", &m_run, "run/I" );
+  m_BBTree->Branch( "subrun", &m_subrun, "subrun/I" );
+  m_BBTree->Branch( "event", &m_event, "event/I" );
+  m_BBTree->Branch( "ibox", &m_nfilledboxes, "ibox/I" );
+  m_BBTree->Branch( "label", m_bblabel, "label[100]/C" );
+  
+
   // Bounding Box Branches: one for each plane
   // ugh, these branches are such bad code...
   m_plane_bb_loleft_t = new std::vector<int>*[nplanes];
@@ -710,6 +808,10 @@ void Yolo::setupTrees(int nplanes) {
   m_plane_bb_hiright_w = new std::vector<int>*[nplanes];
   m_plane_bb_hileft_t = new std::vector<int>*[nplanes];
   m_plane_bb_hileft_w = new std::vector<int>*[nplanes];
+  m_plane_bbinteraction_loleft_t = new int[nplanes];
+  m_plane_bbinteraction_loleft_w = new int[nplanes];
+  m_plane_bbinteraction_hiright_t = new int[nplanes];
+  m_plane_bbinteraction_hiright_w = new int[nplanes];
   for (int plane=0; plane<nplanes; plane++) {
     m_plane_bb_loleft_t[plane] = new std::vector<int>;
     m_plane_bb_loleft_w[plane] = new std::vector<int>;
@@ -722,10 +824,13 @@ void Yolo::setupTrees(int nplanes) {
 
     // set the ttree branch
     char branchname[100];
+
     sprintf( branchname, "LoLeft_t_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_loleft_t[plane]) );
+    m_BBTree->Branch( branchname, &m_plane_bbinteraction_loleft_t[plane] );
     sprintf( branchname, "LoLeft_w_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_loleft_w[plane]) );
+    m_BBTree->Branch( branchname, &m_plane_bbinteraction_loleft_w[plane] );
 
     sprintf( branchname, "LoRight_t_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_loright_t[plane]) );
@@ -734,8 +839,10 @@ void Yolo::setupTrees(int nplanes) {
 
     sprintf( branchname, "HiRight_t_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_hiright_t[plane]) );
+    m_BBTree->Branch( branchname, &m_plane_bbinteraction_hiright_t[plane] );
     sprintf( branchname, "HiRight_w_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_hiright_w[plane]) );
+    m_BBTree->Branch( branchname, &m_plane_bbinteraction_hiright_w[plane] );
 
     sprintf( branchname, "HiLeft_t_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_hileft_t[plane]) );
@@ -743,24 +850,13 @@ void Yolo::setupTrees(int nplanes) {
     m_ImageTree->Branch( branchname, &(*m_plane_bb_hileft_w[plane]) );
   }
   
-
-  
-  // // Bounding Box Tree
-  // // -----------------
-  // m_BBTree->Branch( "run", &m_run, "run/I" );
-  // m_BBTree->Branch( "subrun", &m_subrun, "subrun/I" );
-  // m_BBTree->Branch( "event", &m_event, "event/I" );
-  // m_BBTree->Branch( "plane", &m_bbplane, "plane/I" );
-  // m_BBTree->Branch( "UpLeft", m_UpLeft, "UpLeft[2]/S" );
-  // m_BBTree->Branch( "UpRight", m_UpRight, "UpRight[2]/S" );
-  // m_BBTree->Branch( "LoRight", m_LoRight, "LoRight[2]/S" );
-  // m_BBTree->Branch( "LoLeft", m_LoLeft, "LoLeft[2]/S" );
-  // m_BBTree->Branch( "label", m_label, "label[50]/C" );
-  
+  m_bbox_label = new std::vector<std::string>;
+  m_ImageTree->Branch( "bblabels", m_bbox_label );
 }
 
 void Yolo::clearBoundingBoxes() {
   
+  m_bbox_label->clear();
   for (int plane=0; plane<fNPlanes; plane++) {
     m_plane_bb_loleft_t[plane]->clear();
     m_plane_bb_loleft_w[plane]->clear();
