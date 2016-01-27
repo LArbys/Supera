@@ -9,7 +9,7 @@ yolo: {
     # use RawDigit, Wire, and Hit as input respectively. Only RawDigit impelmented for now
     Producers:   ["daq","",""] 
     # Verbosity level, 1 = INFO and quite verbose. 0 will potentially kill your terminal. 2 is normal
-    Verbosity:   1
+    Verbosity:   2
     # output db name (producer name, plane id will be padded for different image)
     DatabaseName: "output_supera.mdb" 
     # A hard-cut limit for outer edge of an image. A range is specified by [min,max] pair for each plane and time.
@@ -42,6 +42,7 @@ yolo: {
     #                  from one image to antoher.
     # Bounding Box Options
     GroupAllInteractions: true
+    UseSimChannel: false
     # Filters
     ImageFilters: ["FilterEmptyImages"]
     FilterConfigs: {

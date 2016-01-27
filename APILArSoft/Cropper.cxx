@@ -6,8 +6,11 @@
 #include "Utilities/TimeService.h"
 #include "Utilities/DetectorProperties.h"
 #include "Utilities/LArProperties.h"
+#include "MCBase/MCStep.h"
 
 #include "LArCaffe/larbys.h"
+
+#include "TLorentzVector.h" // ROOT
 
 namespace larcaffe {
 
@@ -50,7 +53,7 @@ namespace larcaffe {
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
       for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
-      
+
       for(auto const& mct : mct_v) {
 	
 	auto boundary = WireTimeBoundary(mct);
@@ -59,6 +62,81 @@ namespace larcaffe {
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
 	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    isempty = false;
+	    break;
+	  }
+	}
+
+	if ( isempty )
+	  continue;
+	
+	for(size_t i=0; i<result.size(); ++i) {
+	  
+	  auto& all = result[i];
+	  auto& one = boundary[i];
+	  if(all.first  > one.first ) all.first  = one.first;
+	  if(all.second < one.second) all.second = one.second;
+	  
+	}
+      }
+      
+      if(logger().info()) {
+	
+	for(size_t plane=0; plane <= geom->Nplanes(); ++plane)
+	  
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
+	    << "MCTrack Collection ... Plane " << plane 
+	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+      }
+      
+      return result;
+    }
+    
+    RangeArray_t Cropper::WireTimeBoundary(const std::vector<sim::MCTrack>& mct_v, const std::vector<sim::MCShower>& mcsh_v ) const
+    {
+      art::ServiceHandle<geo::Geometry> geom;
+
+      RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
+      
+      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+    
+      // MCTRACKS
+      for(auto const& mct : mct_v) {
+	
+	auto boundary = WireTimeBoundary(mct);
+
+	// check if empty
+	bool isempty = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    isempty = false;
+	    break;
+	  }
+	}
+
+	if ( isempty )
+	  continue;
+	
+	for(size_t i=0; i<result.size(); ++i) {
+	  
+	  auto& all = result[i];
+	  auto& one = boundary[i];
+	  if(all.first  > one.first ) all.first  = one.first;
+	  if(all.second < one.second) all.second = one.second;
+	  
+	}
+      }
+
+      // MCSHOWERS
+      for(auto const& mcsh : mcsh_v) {
+	
+	auto boundary = WireTimeBoundary(mcsh);
+
+
+	// check if empty
+	bool isempty = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 || boundary[plane].first==larcaffe::kINVALID_UINT) {
 	    isempty = false;
 	    break;
 	  }
@@ -139,6 +217,114 @@ namespace larcaffe {
 	// 	 << " ... "
 	// 	 << " z=" << xyz[2]
 	// 	 << " wire=" << geom->NearestWireID(xyz, 2) 
+	// 	 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	// 	 << std::endl;
+
+      }
+      
+      for(auto& r : result) 
+	
+	if(r.first == larcaffe::kINVALID_UINT && r.second == 0) r.first = 0;
+      
+      if(logger().info()) {
+	
+	for(size_t plane=0; plane <= geom->Nplanes(); ++plane)
+	  
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
+	    << "Single MCTrack ... Plane " << plane 
+	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+      }
+      
+      return result;
+    }
+
+    RangeArray_t Cropper::WireTimeBoundary(const ::sim::MCShower& mcsh) const
+    {
+      art::ServiceHandle<geo::Geometry> geom;
+      art::ServiceHandle<util::LArProperties> larp;
+      art::ServiceHandle<util::DetectorProperties> detp;
+      art::ServiceHandle<util::TimeService> ts;
+      const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns
+      const int tick_max = detp->NumberTimeSamples();
+      double xyz[3] = {0.};
+      
+      RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
+      
+      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+
+      const sim::MCStep& detprofile = mcsh.DetProfile();
+      double energy = detprofile.E();
+      if (energy<1 )
+	return result;
+      //double showerlength = 13.8874 + 0.121734*energy - (3.75571e-05)*energy*energy;
+      double showerlength = 100.0;
+      double detprofnorm = sqrt( detprofile.Px()*detprofile.Px() + detprofile.Py()*detprofile.Py() + detprofile.Pz()*detprofile.Pz() );
+      TLorentzVector showerend;
+      showerend[0] = detprofile.X()+showerlength*(detprofile.Px()/detprofnorm); 
+      showerend[1] = detprofile.Y()+showerlength*(detprofile.Py()/detprofnorm); 
+      showerend[2] = detprofile.Z()+showerlength*(detprofile.Pz()/detprofnorm); 
+      showerend[3] = detprofile.T();
+      //std::cout << "showerlength: " << showerlength << " norm=" << detprofnorm << std::endl;
+      
+      std::vector< TLorentzVector > step_v;
+      step_v.push_back( detprofile.Position() );
+      step_v.push_back( showerend );
+      // step_v.push_back( mcsh.AncestorStart() );
+      // step_v.push_back( mcsh.AncestorEnd() );
+      
+      for(auto& step : step_v) {
+	
+	// Figure out time
+	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + (step.X() / drift_velocity))) + 1;
+
+	if(tick < 0 || tick >= tick_max) continue;
+	
+	auto& trange = result.back();
+	if(trange.first  > (unsigned int)tick) trange.first  = tick;
+	if(trange.second < (unsigned int)tick) trange.second = tick;
+	
+	// Figure out wire per plane
+	xyz[0] = step.X();
+	xyz[1] = step.Y();
+	xyz[2] = step.Z();
+	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+
+	  try{
+	    geo::WireID wire_id;
+	    try {
+	      wire_id = geom->NearestWireID(xyz, plane);
+	    }
+	    catch (geo::InvalidWireIDError& err) {
+	      //std::cout << "out of bounds. using better number" << std::endl;
+	      // if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	      // 	wire_id.Wire = geom->Nwires(plane);
+	      // else
+	      // 	wire_id.Wire = 0;
+	      wire_id.Wire = err.better_wire_number;
+	    }
+	    catch (...) {
+	      //std::cout << "out of bounds. using better number" << std::endl;
+	      if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	      	wire_id.Wire = geom->Nwires(plane);
+	      else
+	      	wire_id.Wire = 0;
+	    }
+	  
+	    if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
+	    if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
+
+	  }
+	  catch(...) {continue;}
+
+	}
+	// std::cout<< "MCSHOWER x=" << xyz[0]
+	// 	 <<" : t="<<step.T() << " ns"
+	// 	 <<" v=" << drift_velocity 
+	// 	 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
+	// 	 << " tick=" << tick
+	// 	 << " ... "
+	// 	 << " z=" << xyz[2]
+	//   //<< " wire=" << wire_id.Wire
 	// 	 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
 	// 	 << std::endl;
 

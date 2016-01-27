@@ -5,6 +5,7 @@
 
 // LArSoft
 #include "MCBase/MCTrack.h"
+#include "MCBase/MCShower.h"
 #include "Simulation/SimChannel.h"
 
 // LArCaffe
@@ -36,11 +37,13 @@ namespace larcaffe {
 	 which contains all trajectory points of input MCTrack.
       */
       RangeArray_t WireTimeBoundary( const sim::MCTrack& mct                ) const;
+      RangeArray_t WireTimeBoundary( const sim::MCShower& mcsh                ) const;
       /**
 	 Given a collection of MCTracks, returns length 4 range array (3 planes + time) \n
 	 which contains all trajectory points of all input MCTracks.
       */
       RangeArray_t WireTimeBoundary( const std::vector<sim::MCTrack>& mct_v ) const;
+      RangeArray_t WireTimeBoundary( const std::vector<sim::MCTrack>& mct_v, const std::vector<sim::MCShower>& mcsh_v ) const;
       /** 
 	  Given a collection of SimChannel, returns length 4 range array (3 planes + time) \n
 	  which contains all energy deposition points of input.

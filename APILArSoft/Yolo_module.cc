@@ -133,6 +133,7 @@ private:
   int* m_wires;  //< image width in wires [planeid]
   int fNPlanes; //< number of wire planes
   bool fGroupAllInteractions;
+  bool fUseSimChannel;
   bool fCosmicsMode;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
@@ -268,6 +269,7 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   
   // group all interactions into one big bounding box (for neutrino mode)
   fGroupAllInteractions = p.get<bool>( "GroupAllInteractions", false );
+  fUseSimChannel = p.get<bool>( "UseSimChannel", false );
   fCosmicsMode = p.get<bool>( "CosmicsMode", false );
 
   // cropper hard limit (dependent on cropper params)
@@ -362,105 +364,130 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
     throw ::larcaffe::larbys();
   }
-  
-  // create sets of interactions
 
-  // start with tracks
-  std::map<unsigned int,std::vector<sim::MCTrack> > interaction_m;
-
-  for(auto const& mct : *mctHandle) {
-    
-    std::cout << "mctrack: id=" << mct.TrackID() << " pdg=" << mct.PdgCode() << " " << mct.Process() << " parent=" << mct.AncestorTrackID()  << std::endl;
-    if ( fCosmicsMode ) {
-      // we skip the neutrons for now, else its a fucking mess -- if we get smarter, could be interesting
-      if ( mct.PdgCode()==2112 )
-	continue;
-    }
-
-    if ( fGroupAllInteractions ) {
-      // look to see if ancestor in map
-      auto iter = interaction_m.find(0);
-      if ( iter==interaction_m.end() )
-	iter = interaction_m.emplace( 0, std::vector<sim::MCTrack>() ).first;
-      (*iter).second.push_back(mct);
-    }
-    else {
-      auto iter = interaction_m.find(mct.AncestorTrackID());
-      
-      // if no ancestor found, add it to map
-      if( iter == interaction_m.end() )
-	iter = interaction_m.emplace(mct.AncestorTrackID(),std::vector<sim::MCTrack>()).first;
-      
-      // otherwise, add it to the vector of mctracks
-      (*iter).second.push_back(mct);
-    }
+  art::Handle<std::vector<sim::SimChannel> > simchHandle;
+  e.getByLabel("largeant",simchHandle);
+  if(!simchHandle.isValid()) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing SimChannel info (cannot apply MC region cut!" << std::endl;
+    throw ::larcaffe::larbys();
   }
 
-  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Made " << interaction_m.size() << " interaction groups to crop around" << std::endl;
-
-  // get shower info
-  std::set< unsigned int > decaytracks;
-  for(auto const& mcsh : *mcshHandle) {
-    std::cout << "mcshower: id=" << mcsh.TrackID() << " pdg=" << mcsh.PdgCode() << " " << mcsh.Process() << " parent=" << mcsh.AncestorTrackID()  << std::endl;
-    if ( std::string(mcsh.Process())=="Decay" ) {
-      auto ittrack=interaction_m.find( mcsh.AncestorTrackID() );
-      if ( ittrack!=interaction_m.end() ) {
-	// matching
-	decaytracks.insert( mcsh.AncestorTrackID() );
-      }
-    }
-  }
-  
-  // now find bounding box of each interaction
-  m_interaction_list.clear();
-  for(auto const& int_pair : interaction_m) {
-    
-    auto range_array = _cropper_interaction.Format(_cropper_interaction.WireTimeBoundary(int_pair.second));
-
-    // determine what the interaction is
+  if ( fUseSimChannel ) {
+    auto range_array = _cropper.Format(_cropper.WireTimeBoundary((*simchHandle)));
+    image_v.push_back(range_array);
     std::stringstream ss;
-    if ( !fCosmicsMode ) {
-      ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
-    }
-    else {
-      const sim::MCTrack& mct0 = int_pair.second.at(0);
-      if ( std::abs(mct0.PdgCode())==13 ) {
-	// muon
-	ss << "cosmic_muon";
-	if ( int_pair.second.size()>1 ) {
-	  auto itmatch = decaytracks.find( int_pair.first );
-	  if ( itmatch!=decaytracks.end() )
-	    ss << "_decay";
-	}//end of if not single muon only
-      }//end of if muon
-      else if ( std::abs(mct0.PdgCode())==2212 )  {
-	ss << "cosmic_proton";
-      }
-      else if ( std::abs(mct0.PdgCode())==11 ) {
-	ss << "cosmic_shower";
-      }
-      else 
-	ss << "cosmic_other";
-    }//end of if cosmics
+    ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
     m_interaction_list.push_back( ss.str() );
+  }
+  else {
+    // create sets of interactions
 
-    auto const& time_range = range_array.back();
+    // start with tracks
+    std::map<unsigned int,std::vector<sim::MCTrack> > interaction_m;
+
+    for(auto const& mct : *mctHandle) {
     
-    for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
-
-      auto const& wire_range = range_array[plane];
-
-      if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
-	
-	image_v.push_back(range_array);
-
-	break;
-	
+      //std::cout << "mctrack: id=" << mct.TrackID() << " pdg=" << mct.PdgCode() << " " << mct.Process() << " parent=" << mct.AncestorTrackID()  << std::endl;
+      if ( fCosmicsMode ) {
+	// we skip the neutrons for now, else its a fucking mess -- if we get smarter, could be interesting
+	if ( mct.PdgCode()==2112 )
+	  continue;
       }
+
+      if ( fGroupAllInteractions ) {
+	// look to see if ancestor in map
+	auto iter = interaction_m.find(0);
+	if ( iter==interaction_m.end() )
+	  iter = interaction_m.emplace( 0, std::vector<sim::MCTrack>() ).first;
+	(*iter).second.push_back(mct);
+      }
+      else {
+	auto iter = interaction_m.find(mct.AncestorTrackID());
       
+	// if no ancestor found, add it to map
+	if( iter == interaction_m.end() )
+	  iter = interaction_m.emplace(mct.AncestorTrackID(),std::vector<sim::MCTrack>()).first;
+      
+	// otherwise, add it to the vector of mctracks
+	(*iter).second.push_back(mct);
+      }
     }
+
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Made " << interaction_m.size() << " interaction groups to crop around" << std::endl;
+
+    // get shower info
+    std::set< unsigned int > decaytracks; // decay information
+    std::map<unsigned int,std::vector<sim::MCShower> > shower_m;
+    shower_m.emplace( 0, std::vector<sim::MCShower>() );
+    for(auto const& mcsh : *mcshHandle) {
+      //std::cout << "mcshower: id=" << mcsh.TrackID() << " pdg=" << mcsh.PdgCode() << " " << mcsh.Process() << " parent=" << mcsh.AncestorTrackID()  << std::endl;
+      // look for decays
+      if ( std::string(mcsh.Process())=="Decay" ) {
+	auto ittrack=interaction_m.find( mcsh.AncestorTrackID() );
+	if ( ittrack!=interaction_m.end() ) {
+	  // matching
+	  decaytracks.insert( mcsh.AncestorTrackID() );
+	}
+      }
+      // load all showers in neutrino mode
+      if ( fGroupAllInteractions ) {
+	auto iter = shower_m.find(0);
+	(*iter).second.push_back(mcsh);
+      }
+    }
+
+  
+    // now find bounding box of each interaction
+    m_interaction_list.clear();
+    for(auto const& int_pair : interaction_m) {
     
-  }//end of interaction loop
+      auto range_array = _cropper_interaction.Format(_cropper_interaction.WireTimeBoundary(int_pair.second, shower_m[0]));
+
+      // determine what the interaction is
+      std::stringstream ss;
+      if ( !fCosmicsMode ) {
+	ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+      }
+      else {
+	const sim::MCTrack& mct0 = int_pair.second.at(0);
+	if ( std::abs(mct0.PdgCode())==13 ) {
+	  // muon
+	  ss << "cosmic_muon";
+	  if ( int_pair.second.size()>1 ) {
+	    auto itmatch = decaytracks.find( int_pair.first );
+	    if ( itmatch!=decaytracks.end() )
+	      ss << "_decay";
+	  }//end of if not single muon only
+	}//end of if muon
+	else if ( std::abs(mct0.PdgCode())==2212 )  {
+	  ss << "cosmic_proton";
+	}
+	else if ( std::abs(mct0.PdgCode())==11 ) {
+	  ss << "cosmic_shower";
+	}
+	else 
+	  ss << "cosmic_other";
+      }//end of if cosmics
+      m_interaction_list.push_back( ss.str() );
+
+      auto const& time_range = range_array.back();
+    
+      for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
+
+	auto const& wire_range = range_array[plane];
+
+	if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
+	
+	  image_v.push_back(range_array);
+
+	  break;
+	
+	}
+      
+      }
+    
+    }//end of interaction loop
+  }//end of if not group all interactions
 
   return image_v;
 }//end of findboundingboxes
@@ -670,11 +697,11 @@ void Yolo::analyze(art::Event const & e)
 	  w_lo = std::max( w_lo, 0 );
 	  w_hi = std::min( w_hi, (int)the_range_v[plane].second-(int)the_range_v[plane].first);
 
-	  std::cout << "[Plane " << plane << " BBOX]"
-		    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
-		    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
-		    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
-		    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
+	  // std::cout << "[Plane " << plane << " BBOX]"
+	  // 	    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
+	  // 	    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
+	  // 	    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
+	  // 	    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
 
 	  m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
 	  m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );

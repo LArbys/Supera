@@ -35,3 +35,4 @@ physics:
 
 physics.analyzers.yolo.GroupAllInteractions: true
 physics.analyzers.yolo.CosmicsMode: false
+physics.analyzers.yolo.UseSimChannel: false
