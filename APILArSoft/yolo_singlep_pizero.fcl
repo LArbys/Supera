@@ -33,6 +33,8 @@ physics:
  end_paths:     [ analyzeIt ]
 }
 
-physics.analyzers.yolo.GroupAllInteractions: false
-physics.analyzers.yolo.CosmicsMode: true
-physics.analyzers.yolo.UseSimChannel: false
+physics.analyzers.yolo.GroupAllInteractions: true
+physics.analyzers.yolo.CosmicsMode: false
+physics.analyzers.yolo.UseSimChannel: true
+physics.analyzers.yolo.SingleParticleMode: true
+physics.analyzers.yolo.SingleParticleName: "pizero"

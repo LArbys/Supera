@@ -43,6 +43,8 @@
 #include "RawData/RawDigit.h" // LArData
 #include "Simulation/SimChannel.h" // LArSim
 #include "SimulationBase/GTruth.h" // NuTools
+#include "SimulationBase/MCTruth.h" // NuTools
+#include "SimulationBase/MCNeutrino.h" // NuTools
 #include "MCBase/MCTrack.h" // LArData
 #include "MCBase/MCShower.h" // LArData
 
@@ -129,12 +131,15 @@ private:
   int m_mode; //< interaction mode (-1 if cosmic)
   int m_nuscatter; // neutrino scattering code
   int m_flavor; //< neutrino flavor (-1 if cosmic)
+  int m_interaction; //< neutrino interaction type (-1 cosmics)
   int m_nticks; //< image height in time ticks
   int* m_wires;  //< image width in wires [planeid]
   int fNPlanes; //< number of wire planes
   bool fGroupAllInteractions;
   bool fUseSimChannel;
   bool fCosmicsMode;
+  bool fSingleParticleMode;
+  std::string singlepname;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
   
@@ -271,6 +276,8 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   fGroupAllInteractions = p.get<bool>( "GroupAllInteractions", false );
   fUseSimChannel = p.get<bool>( "UseSimChannel", false );
   fCosmicsMode = p.get<bool>( "CosmicsMode", false );
+  fSingleParticleMode = p.get<bool>("SingleParticleMode",false);
+  singlepname = p.get<std::string>("SingleParticleName","");
 
   // cropper hard limit (dependent on cropper params)
   std::vector<std::pair<int,int> > range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitRange");
@@ -372,11 +379,17 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
     throw ::larcaffe::larbys();
   }
 
+  // this is a mess! rewrite while jobs are running
   if ( fUseSimChannel ) {
     auto range_array = _cropper.Format(_cropper.WireTimeBoundary((*simchHandle)));
     image_v.push_back(range_array);
     std::stringstream ss;
-    ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+    if ( fSingleParticleMode ) {
+      ss << singlepname;
+    }
+    else {
+      ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+    }
     m_interaction_list.push_back( ss.str() );
   }
   else {
@@ -445,10 +458,10 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
 
       // determine what the interaction is
       std::stringstream ss;
-      if ( !fCosmicsMode ) {
-	ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+      if ( fSingleParticleMode ) {
+	ss << singlepname;
       }
-      else {
+      else if ( fCosmicsMode ){
 	const sim::MCTrack& mct0 = int_pair.second.at(0);
 	if ( std::abs(mct0.PdgCode())==13 ) {
 	  // muon
@@ -468,6 +481,11 @@ std::vector<larcaffe::RangeArray_t> Yolo::findBoundingBoxes(const art::Event& e)
 	else 
 	  ss << "cosmic_other";
       }//end of if cosmics
+      else {
+	// neutrino mode
+	ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
+      }
+
       m_interaction_list.push_back( ss.str() );
 
       auto const& time_range = range_array.back();
@@ -496,27 +514,33 @@ void Yolo::getMCTruth( art::Event const & e ) {
   // Sets the MC truth variables to be stored in m_ImageTree
   
   // GENIE data to get interaction mode and neutrino energy if possible
-  art::Handle< std::vector<simb::GTruth> > genietruth;
-  e.getByLabel( "generator", genietruth );
-  if ( !genietruth.isValid() ) {
+  art::Handle< std::vector<simb::MCTruth> > gentruth;
+  e.getByLabel( "generator", gentruth );
+  if ( fCosmicsMode || fSingleParticleMode || !gentruth.isValid() ) {
     _logger.LOG(::larcaffe::msg::kINFO, __FUNCTION__,__LINE__) << "No GENIE Truth. Must be Cosmic Event" << std::endl;
     m_flavor = -1;
     m_mode = -1;
+    m_interaction = -1;
+    m_nuscatter = -1;
     m_Enu = 0.0;
     return;
   }
-
-  const std::vector<simb::GTruth>& genie = *genietruth;
-  if ( genie.size()!=1 ) {
-    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Unexpected number of GTruth objectS" << std::endl;
-    throw ::larcaffe::larbys();
+  else {
+  
+    const std::vector<simb::MCTruth>& genie = *gentruth;
+    if ( genie.size()!=1 ) {
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Unexpected number of MCTruth objects = " << genie.size() << std::endl;
+      if ( genie.size()==0)
+	throw ::larcaffe::larbys();
+    }
+    m_mode = genie.at(0).GetNeutrino().Mode();
+    m_nuscatter = genie.at(0).GetNeutrino().CCNC();
+    m_interaction = genie.at(0).GetNeutrino().InteractionType();
+    m_flavor = genie.at(0).GetNeutrino().Nu().PdgCode();
+    
+    // Get neutrino energy
+    m_Enu = genie.at(0).GetNeutrino().Nu().E();
   }
-  m_mode = genie.at(0).fGint;
-  m_nuscatter = genie.at(0).fGscatter;
-  m_flavor = genie.at(0).fProbePDG; // a guess
-
-  // Get neutrino energy
-  m_Enu = genie.at(0).fProbeP4.E();
 
 }
 
@@ -697,11 +721,12 @@ void Yolo::analyze(art::Event const & e)
 	  w_lo = std::max( w_lo, 0 );
 	  w_hi = std::min( w_hi, (int)the_range_v[plane].second-(int)the_range_v[plane].first);
 
-	  // std::cout << "[Plane " << plane << " BBOX]"
-	  // 	    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
-	  // 	    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
-	  // 	    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
-	  // 	    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
+	  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	    << "[Plane " << plane << " BBOX]"
+	    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
+	    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
+	    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
+	    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
 
 	  m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
 	  m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
@@ -809,6 +834,7 @@ void Yolo::setupTrees(int nplanes) {
   m_ImageTree->Branch( "Enu", &m_Enu, "Enu/F" );
   m_ImageTree->Branch( "mode", &m_mode, "mode/I" );
   m_ImageTree->Branch( "nuscatter", &m_nuscatter, "nuscatter/I" );
+  m_ImageTree->Branch( "interaction", &m_interaction, "interaction/I" );
   m_ImageTree->Branch( "flavor", &m_flavor, "flavor/I" );
   m_ImageTree->Branch( "nticks", &m_nticks, "nticks/I" );
   char chr_mwires[20];

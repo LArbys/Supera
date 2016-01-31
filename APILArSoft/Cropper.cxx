@@ -61,12 +61,12 @@ namespace larcaffe {
 	// check if empty
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
 	    isempty = false;
 	    break;
 	  }
 	}
-
+	
 	if ( isempty )
 	  continue;
 	
@@ -108,7 +108,7 @@ namespace larcaffe {
 	// check if empty
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
 	    isempty = false;
 	    break;
 	  }
@@ -198,28 +198,45 @@ namespace larcaffe {
 	xyz[2] = step.Z();
 	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
 
-	  try{
-
-	    auto wire_id = geom->NearestWireID(xyz, plane);
-	  
-	    if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
-	    if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
-
+	  geo::WireID wire_id;
+	  try {
+	    wire_id = geom->NearestWireID(xyz, plane);
 	  }
-	  catch(...) {continue;}
+	  catch (geo::InvalidWireIDError& err) {
+	    //std::cout << "out of bounds. using better number" << std::endl;
+	    // if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	    // 	wire_id.Wire = geom->Nwires(plane);
+	    // else
+	    // 	wire_id.Wire = 0;
+	    wire_id.Wire = err.better_wire_number;
+	  }
+	  catch (...) {
+	    //std::cout << "out of bounds. using better number" << std::endl;
+	    if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	      	wire_id.Wire = geom->Nwires(plane);
+	    else
+	      wire_id.Wire = 0;
+	  }
+	  
+	  
+	  if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
+	  if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
 
 	}
-	// std::cout<< "x=" << xyz[0]
-	// 	 <<" : t="<<step.T() << " ns"
-	// 	 <<" v=" << drift_velocity 
-	// 	 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
-	// 	 << " tick=" << tick
-	// 	 << " ... "
-	// 	 << " z=" << xyz[2]
-	// 	 << " wire=" << geom->NearestWireID(xyz, 2) 
-	// 	 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
-	// 	 << std::endl;
-
+	if(logger().info() ) {
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+	    << "x=" << xyz[0]
+	    <<" : t="<<step.T() << " ns"
+	    <<" v=" << drift_velocity 
+	    << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
+	    << " tick=" << tick
+	    << " ... "
+	      << " z=" << xyz[2]
+	    //<< " wire=" << geom->NearestWireID(xyz, 2) 
+	    << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	    << std::endl;
+	}
+	
       }
       
       for(auto& r : result) 
@@ -317,16 +334,20 @@ namespace larcaffe {
 	  catch(...) {continue;}
 
 	}
-	// std::cout<< "MCSHOWER x=" << xyz[0]
-	// 	 <<" : t="<<step.T() << " ns"
-	// 	 <<" v=" << drift_velocity 
-	// 	 << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
-	// 	 << " tick=" << tick
-	// 	 << " ... "
-	// 	 << " z=" << xyz[2]
-	//   //<< " wire=" << wire_id.Wire
-	// 	 << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
-	// 	 << std::endl;
+
+	if(logger().info() ) {
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+	    << "MCSHOWER x=" << xyz[0]
+	    <<" : t="<<step.T() << " ns"
+	    <<" v=" << drift_velocity 
+	    << " t+x/v=" << step.T() + (step.X() / drift_velocity) 
+	    << " tick=" << tick
+	    << " ... "
+	    << " z=" << xyz[2]
+	    //<< " wire=" << wire_id.Wire
+	    << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	    << std::endl;
+	}
 
       }
       
@@ -339,7 +360,7 @@ namespace larcaffe {
 	for(size_t plane=0; plane <= geom->Nplanes(); ++plane)
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
-	    << "Single MCTrack ... Plane " << plane 
+	    << "Single MCShower ... Plane " << plane 
 	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
       }
       
@@ -419,11 +440,11 @@ namespace larcaffe {
 	emptyrange.first = emptyrange.second = 0;
 	return emptyrange;
       }
-      if ( range.first==0 && range.second==0 ) {
-	Range_t emptyrange;
-	emptyrange.first = emptyrange.second = 0;
-        return emptyrange;
-      }
+      // if ( range.first==0 && range.second==0 ) {
+      // 	Range_t emptyrange;
+      // 	emptyrange.first = emptyrange.second = 0;
+      //   return emptyrange;
+      // }
 
       if(range.second < range.first) {
 	logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
@@ -461,12 +482,12 @@ namespace larcaffe {
 	return result;
       }
 
-      if(!range.first && !range.second) {
-	if(logger().info()) 
-	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
-	    << "Zero range provided. Nothing to format... " << std::endl;
-	return result;
-      }
+      // if(!range.first && !range.second) {
+      // 	if(logger().info()) 
+      // 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+      // 	    << "Zero range provided. Nothing to format... " << std::endl;
+      // 	return result;
+      // }
       
       const int center = ( range.first  + range.second ) / 2;
 
@@ -519,10 +540,10 @@ namespace larcaffe {
       
       // Case3: touching only the min bound
       if(upper_bound < max && lower_bound < 0) {
-	result.first  = 0;
+	result.first  = 0; // set to lower bound
 	if(!_compression_factor) {
 	  result.second = target_width * (((int)(range.second) + padding) / target_width);
-	  if(result.second < range.second) result.second += target_width;
+	  if((result.second < range.second) || range.second==0 ) result.second += target_width;
 	  if((int)(result.second) >= max) result.second -= target_width;
 	  result.second -= 1;
 	}
