@@ -35,7 +35,6 @@ namespace larcaffe {
 
   void Image::set_pixel( size_t h, size_t w, float value ) {
     if ( h >= fHeight || w >= fWidth ) throw larbys("Out-of-bound pixel set request!");
-      return;
     (*this)[w*fHeight + h] = value;
   }
 
@@ -55,7 +54,11 @@ namespace larcaffe {
   void Image::copy(size_t h, size_t w, const float* src, size_t num_pixel) 
   { 
     const size_t idx = index(h,w);
-    if(idx+num_pixel >= size()) throw larbys("memcpy size exceeds allocated memory!");
+    if(idx+num_pixel > size()) {
+      char oops[500];
+      sprintf( oops,"memcpy end (%d) exceeds allocated memory (%d)!", idx+num_pixel, size() );
+      throw larbys(oops);
+    }
     
     memcpy(&((*this)[idx]),src, num_pixel * sizeof(float));
 
@@ -74,9 +77,14 @@ namespace larcaffe {
   void Image::copy(size_t h, size_t w, const short* src, size_t num_pixel) 
   {
     const size_t idx = index(h,w);
-    if(idx+num_pixel >= size()) throw larbys("memcpy size exceeds allocated memory!");
+
+    if(idx+num_pixel > size()) {
+      char oops[500];
+      sprintf( oops, "memcpy end (%d) exceeds allocated memory (%d) [idx=%d,num_pixel=%d]!", idx+num_pixel, size(), idx, num_pixel );
+      throw larbys(oops);
+    }
     
-    for(size_t i=0; i<num_pixel; ++i) (*this)[idx+i] = src[num_pixel];
+    for(size_t i=0; i<num_pixel; ++i) (*this)[idx+i] = (float)src[num_pixel];
 
   }
 
@@ -90,11 +98,13 @@ namespace larcaffe {
       throw larbys("Not enough pixel in source!");
   }
 
-  Image Image::copy_compress(size_t height, size_t width) const
-  {
-    if(fHeight % height || fWidth % width)
-      throw larbys("Compression only possible if height/width are modular 0 of compression factor!");
-
+  Image Image::copy_compress(size_t height, size_t width, CompressionModes_t mode) const
+  { 
+    if(fHeight % height || fWidth % width) {
+      char oops[500];
+      sprintf(oops,"Compression only possible if height/width are modular 0 of compression factor! H:%dMOD%d=%d W:%dMOD%d=%d",fHeight,height,fHeight%height,fWidth,width,fWidth%width);
+      throw larbys(oops);
+    }
     size_t width_factor  = fWidth  / width;
     size_t height_factor = fHeight / height;
     Image result(height,width);
@@ -106,16 +116,25 @@ namespace larcaffe {
 	for(size_t orig_w=w*width_factor; orig_w<(w+1)*width_factor; ++orig_w)
 	  for(size_t orig_h=h*height_factor; orig_h<(h+1)*height_factor; ++orig_h) {
 	    //std::cout << "    " << (*this)[orig_w * fHeight + orig_h] << " @ " << orig_w * fHeight + orig_h << std::endl;
-	    value += (*this)[orig_w * fHeight + orig_h];
+	    if ( mode!=kMaxPool ) {
+	      // for sum and average mode
+	      value += (*this)[orig_w * fHeight + orig_h];
+	    }
+	    else {
+	      // maxpool
+	      value = ( value<(*this)[orig_w * fHeight + orig_h] ) ? (*this)[orig_w * fHeight + orig_h] : value;
+	    }
 	  }
 	//std::cout<<std::endl;
 	result[w*height + h] = value;
+	if ( mode==kAverage ) 
+	  result[w*height + h] /= (float)(width_factor*height_factor);
       }
     }
     return result;
   }
 
-  void Image::compress(size_t height, size_t width)
-  { (*this) = copy_compress(height,width); }
+  void Image::compress(size_t height, size_t width, CompressionModes_t mode)
+  { (*this) = copy_compress(height,width,mode); }
   
 }
