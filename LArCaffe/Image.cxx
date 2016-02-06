@@ -34,7 +34,9 @@ namespace larcaffe {
   void Image::clear_data() { for(auto& v : (*this)) v = 0.; }
 
   void Image::set_pixel( size_t h, size_t w, float value ) {
-    if ( h >= fHeight || w >= fWidth ) throw larbys("Out-of-bound pixel set request!");
+    char oops[500];
+    sprintf( oops,"Out-of-bound pixel set request (h=%d, w=%d)!", fHeight, fWidth );
+    if ( h >= fHeight || w >= fWidth ) throw larbys(oops);
     (*this)[w*fHeight + h] = value;
   }
 

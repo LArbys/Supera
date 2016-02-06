@@ -55,6 +55,7 @@ namespace larcaffe {
       
       int nticks = time_range.second-time_range.first+1;
       int nwires = wire_range.second-wire_range.first+1;
+      art::ServiceHandle<geo::Geometry> geom;
 
       // Stuck with LArSoft
       art::ServiceHandle<geo::Geometry> geom;

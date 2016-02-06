@@ -7,7 +7,7 @@ yolo: {
     # store image from each plane by enabling boolean (length = # planes, collection plane = 2)
     EnablePlane: [true,true,true] 
     # use RawDigit, Wire, and Hit as input respectively. Only RawDigit impelmented for now
-    Producers:   ["daq","",""] 
+    Producers:   ["daq","caldata",""] 
     # Verbosity level, 1 = INFO and quite verbose. 0 will potentially kill your terminal. 2 is normal
     Verbosity:   1
     # output db name (producer name, plane id will be padded for different image)
