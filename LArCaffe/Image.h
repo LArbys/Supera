@@ -27,7 +27,7 @@ namespace larcaffe {
     Image(const Image& rhs);
     virtual ~Image(){}
 
-    typedef enum { kSum, kAverage, kMaxPool } CompressionModes_t;
+    enum CompressionModes_t { kSum, kAverage, kMaxPool };
 
     unsigned int height() const { return fHeight; }
     unsigned int width()  const { return fWidth;  }

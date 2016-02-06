@@ -51,20 +51,23 @@ namespace larcaffe {
       return img;
     }
 
-    larcaffe::Image ImageExtractor::Extract( int planeid, const Range_t& wire_range, const Range_t& time_range, const std::vector<reco::Wire>& wires ) {
+    larcaffe::Image ImageExtractor::Extract( int planeid, const Range_t& wire_range, const Range_t& time_range, const std::vector<recob::Wire>& wires ) {
       
       int nticks = time_range.second-time_range.first+1;
       int nwires = wire_range.second-wire_range.first+1;
+
+      // Stuck with LArSoft
+      art::ServiceHandle<geo::Geometry> geom;
 
       larcaffe::Image img( nticks, nwires );
 
       for(auto const& wire : wires) {
 
-	auto const& wire_id = wire.WireID();
+	auto const wire_id = geom->ChannelToWire(wire.Channel()).front();
 	
 	auto const plane = wire_id.Plane;
 
-	if(plane != planeid) continue;
+	if((int)plane != planeid) continue;
 	
 	bool inrange = (wire_range.first <= wire_id.Wire && wire_range.second >= wire_id.Wire);
 	if(!inrange) continue;
