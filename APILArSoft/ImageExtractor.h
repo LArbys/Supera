@@ -7,6 +7,7 @@
 #include "LArCaffe/larcaffe_base.h"
 #include "ConverterAPI.h" // for definition of Range_t ... (needs massive reorg)
 #include "RawData/RawDigit.h"
+#include "RecoBase/Wire.h"
 
 namespace larcaffe {
 
@@ -21,7 +22,7 @@ namespace larcaffe {
       ~ImageExtractor() {};
 
       larcaffe::Image Extract( int planeid, const Range_t& wirerange, const Range_t& timerange, const std::vector<raw::RawDigit>& rawdigits );
-      larcaffe::Image Extract( int planeid, const Range_t& wirerange, const Range_t& timerange, const std::vector<reco::Wire>& wires        );
+      larcaffe::Image Extract( int planeid, const Range_t& wirerange, const Range_t& timerange, const std::vector<recob::Wire>& wires        );
       
     };
 

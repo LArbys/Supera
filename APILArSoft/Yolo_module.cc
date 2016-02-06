@@ -135,6 +135,7 @@ private:
   int m_nticks; //< image height in time ticks
   int* m_wires;  //< image width in wires [planeid]
   int fNPlanes; //< number of wire planes
+  bool fUseWire;
   bool fGroupAllInteractions;
   bool fUseSimChannel;
   bool fCosmicsMode;
@@ -277,6 +278,7 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   fUseSimChannel = p.get<bool>( "UseSimChannel", false );
   fCosmicsMode = p.get<bool>( "CosmicsMode", false );
   fSingleParticleMode = p.get<bool>("SingleParticleMode",false);
+  fUseWire = p.get<bool>("UseWire",true);
   singlepname = p.get<std::string>("SingleParticleName","");
 
   // cropper hard limit (dependent on cropper params)
@@ -550,11 +552,11 @@ void Yolo::analyze(art::Event const & e)
 {
   TStopwatch pWatchAnalyze,pWatchDB,pWatchDatum,pWatchLArIO;
   pWatchAnalyze.Start();
-
+  
   // Implementation of required member function here.
   if(_logger.debug())
     _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Load RawDigits Handle" << std::endl;
-
+  
   //
   // Determine region size
   //
@@ -563,214 +565,241 @@ void Yolo::analyze(art::Event const & e)
   auto region_v = setEventCrop(e);
   if(_logger.info())
     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracted " << region_v.size() << " images!" << std::endl;
-
+  
   // Event Code
   m_event  = (int)e.event();
   m_run    = (int)e.run();
   m_subrun = (int)e.subRun();
-
+  
   // Get MC Truth
   getMCTruth( e );
   
   // Label
   if ( m_mode==-1 )
-    sprintf(m_label, "%d_%d_%d_cosmic", m_run, m_subrun, m_event );
+    sprintf(m_label, "cosmics_%d_%d_%d", m_run, m_subrun, m_event );
   else
-    sprintf(m_label, "%d_%d_%d_nu_%d", m_run, m_subrun, m_event, m_mode );
-
+    sprintf(m_label, "nu_%d_%d_%d_mode_%d", m_run, m_subrun, m_event, m_mode );
+  
   //
   // Save region image and bounding boxes
   //
   art::ServiceHandle<geo::Geometry> geom;
-
-
+  
+  
   if(!_producer_v[0].empty()) {
     if(_logger.info())
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
-
+    
     pWatchLArIO.Start();
     art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
-    e.getByLabel(_producer_v[0], digitVecHandle);
+    art::Handle< std::vector<recob::Wire> > wireVecHandle;
+    if ( fUseWire )
+      e.getByLabel(_producer_v[1], wireVecHandle );
+    else
+      e.getByLabel(_producer_v[0], digitVecHandle);
     _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
-    if ( !digitVecHandle.isValid() ) // no rawdigits
-      _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
-	<< "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
-    else if ( digitVecHandle->empty() ) // empty rawdigits
-      _logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty RawDigits info. skipping." << std::endl;
+    
+    if ( fUseWire ) {
+      if ( !wireVecHandle.isValid() ) {// no rawdigits 
+	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
+	  << "Missing Wires by " << _producer_v[1] << " Skipping." << std::endl;
+	return;
+      }
+      else if ( wireVecHandle->empty() ) // empty rawdigits
+	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Wire info. skipping." << std::endl;
+      else {
+	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	  << "Extracting " << region_v.size() << " images for Wire " << std::endl;
+      }
+    }
     else {
-      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-	<< "Extracting " << region_v.size() << " images for RawDigit " << std::endl;
-
-      // clear bounding boxes
-      clearBoundingBoxes();
-      // place to store image scale-down, if any
-      std::vector<int> plane_compression;
-      plane_compression.resize(fNPlanes+1,1);
-
-      // Make an extractor
-      larcaffe::supera::ImageExtractor extractor;
-
-      // loop through cropping regions (should only be one for Yolo Module)
-      for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
-
-	auto const& range_v = region_v[range_index];
-
-	auto const& time_range = range_v.back();
-
-	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
-	  
-	  auto const& wire_range = range_v[plane];
-	  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__, __LINE__) << "fill wire range " << wire_range.first << " " << wire_range.second << std::endl;
-
-	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
-
-	  // copy data into image
-	  larcaffe::Image img = extractor.Extract( plane, wire_range, time_range, *digitVecHandle );
-
-	  m_nticks = time_range.second-time_range.first+1;
-	  m_wires[plane]  = wire_range.second-wire_range.first+1;
-	  
-	  //check image
-	  // std::cout << "[Check Pre-Compressed Image]" << std::endl;
-	  // for (int t=0; t<(int)(time_range.second-time_range.first+1);t++) {
-	  //   std::cout << img.pixel( t, 1 ) << " ";
-	  // }
-	  // std::cout << std::endl;
-	  
-	  // filter: add the ability to reject images
-	  // bool keep = true;
-	  // for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
-	  //   if( !(*it_filters)->doWeKeep( *db ) ) {
-	  //     keep = false;
-	  //     break;
-	  //   }
-	  // }
-	  // if ( !keep ) {
-	  //   continue;
-	  //}
-
-	  // compress image and bounding boxes
-	  if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
-	    plane_compression[plane] = img.width()/_cropper.TargetWidth();
-	    plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
-	    img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kAverage );
-	  }
-
-	  // std::cout << "[Check Compressed Image]" << std::endl;
-	  // for (int t=0; t<(int)(img.height());t++) {
-	  //   std::cout << img.pixel( t, 1 ) << " ";
-	  // }
-	  // std::cout << std::endl;
-	  
-	  
-	  // transfer image to ROOT variables
-	  m_planeImages[plane]->resize( img.height()*img.width() );
-	  for ( int w=0; w<(int)img.width(); w++) {
-	    for (int t=0; t<(int)img.height(); t++) {
-	      m_planeImages[plane]->at( img.height()*w + t ) = (int)img.pixel( t, w );
-	    }
-	  }
-
-	  // std::cout << "[Check Plane Image]" << std::endl;
-	  // for (int t=0; t<(int)(img.height());t++) {
-	  //   std::cout << m_planeImages[plane]->at( img.height()*1+t);
-	  // }
-	  // std::cout << std::endl;	      
-
-	  
-	  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
-	}//end of loop over planes
-	
-      }// end of image crop ranges
-
-      //
-      // Determine bounding boxes
-      //
-      auto bboxes = findBoundingBoxes(e);
-      // each interaction has bounding boxes in each plane
-      auto const& the_range_v = region_v[0];
-
-      int ibox = -1;
-      m_nfilledboxes = 0;
-      for ( auto const& range : bboxes ) {
-	// range is a RangeArray_t which is a vector< pair<int,int> >
-	// (x,y) = (wire, time 0toX)
-	ibox++;
-
-	// stay within bounds
-	if ( range[fNPlanes].second<the_range_v[fNPlanes].first 
-	     || range[fNPlanes].first>the_range_v[fNPlanes].second )
-	  continue;
-
-	// calculate time bounds in cropped images coordinates
-	int t_lo = (int)range[fNPlanes].first  - (int)the_range_v[fNPlanes].first;
-	int t_hi = (int)range[fNPlanes].second - (int)the_range_v[fNPlanes].first;
-
-	// enforce time bounds
-	t_lo = std::max( t_lo, 0 );
-	t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].second-(int)the_range_v[fNPlanes].first );
-
-	for (int plane=0; plane<fNPlanes; plane++) {
-	  // need to account for compression
-	  // bounding box goes counter clockwise from origin
-
-	  int w_lo = (int)range[plane].first  - (int)the_range_v[plane].first;
-	  int w_hi = (int)range[plane].second - (int)the_range_v[plane].first;
-
-	  // enforce image bounds
-	  w_lo = std::max( w_lo, 0 );
-	  w_hi = std::min( w_hi, (int)the_range_v[plane].second-(int)the_range_v[plane].first);
-
-	  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-	    << "[Plane " << plane << " BBOX]"
-	    << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
-	    << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
-	    << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
-	    << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
-
-	  m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
-	  m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
-	  
-	  m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
-	  m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
-	  
-	  m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
-	  m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
-	  
-	  m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
-	  m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
-
-	  // save image for bbox
-	  larcaffe::Image bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
-
-	  // compress image and bounding boxes
-	  if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
-	    bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kAverage );
-	  }
-	  m_bb_nticks = bbimg.height();
-	  m_bb_nwires = bbimg.width();
-
-	  // transfer image to ROOT variables
-	  m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
-	  for ( int w=0; w<(int)bbimg.width(); w++) {
-	    for (int t=0; t<(int)bbimg.height(); t++) {
-	      m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
-	    }
-	  }
-	  
-	}//end of planes loop to fill bounding boxes
-
-	// save this bbox!
-	m_bbox_label->push_back( m_interaction_list.at(ibox) );
-	sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
-	m_BBTree->Fill();
-	m_nfilledboxes++;
-
-      }//end of loop over sets of bounding boxes for a given interaction
+      if ( !digitVecHandle.isValid() ) { // no rawdigits
+	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
+	  << "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
+	return;
+      }
+      else if ( digitVecHandle->empty() ) // empty rawdigits
+	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty RawDigits info. skipping." << std::endl;
+      else {
+	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	  << "Extracting " << region_v.size() << " images for RawDigit " << std::endl;
+      }
+    }
+    
+    // clear bounding boxes
+    clearBoundingBoxes();
+    // place to store image scale-down, if any
+    std::vector<int> plane_compression;
+    plane_compression.resize(fNPlanes+1,1);
+    
+    // Make an extractor
+    larcaffe::supera::ImageExtractor extractor;
+    
+    // loop through cropping regions (should only be one for Yolo Module)
+    for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
       
-      // Finally fill the tree for this event
-      m_ImageTree->Fill();
-    }// end of if RawDigits Availale    
+      auto const& range_v = region_v[range_index];
+      
+      auto const& time_range = range_v.back();
+      
+      for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+	
+	auto const& wire_range = range_v[plane];
+	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__, __LINE__) << "fill wire range " << wire_range.first << " " << wire_range.second << std::endl;
+	
+	if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+	
+	// copy data into image
+	larcaffe::Image img;
+	if ( fUseWire )
+	  img = extractor.Extract( plane, wire_range, time_range, *wireVecHandle );
+	else
+	  img = extractor.Extract( plane, wire_range, time_range, *digitVecHandle );
+	
+	m_nticks = time_range.second-time_range.first+1;
+	m_wires[plane]  = wire_range.second-wire_range.first+1;
+	
+	//check image
+	// std::cout << "[Check Pre-Compressed Image]" << std::endl;
+	// for (int t=0; t<(int)(time_range.second-time_range.first+1);t++) {
+	//   std::cout << img.pixel( t, 1 ) << " ";
+	// }
+	// std::cout << std::endl;
+	
+	// filter: add the ability to reject images
+	// bool keep = true;
+	// for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
+	//   if( !(*it_filters)->doWeKeep( *db ) ) {
+	//     keep = false;
+	//     break;
+	//   }
+	// }
+	// if ( !keep ) {
+	//   continue;
+	//}
+	
+	// compress image and bounding boxes
+	if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
+	  plane_compression[plane] = img.width()/_cropper.TargetWidth();
+	  plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
+	  img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kAverage );
+	}
+	
+	// std::cout << "[Check Compressed Image]" << std::endl;
+	// for (int t=0; t<(int)(img.height());t++) {
+	//   std::cout << img.pixel( t, 1 ) << " ";
+	// }
+	// std::cout << std::endl;
+	
+	
+	// transfer image to ROOT variables
+	m_planeImages[plane]->resize( img.height()*img.width() );
+	for ( int w=0; w<(int)img.width(); w++) {
+	  for (int t=0; t<(int)img.height(); t++) {
+	    m_planeImages[plane]->at( img.height()*w + t ) = (int)img.pixel( t, w );
+	  }
+	}
+	
+	// std::cout << "[Check Plane Image]" << std::endl;
+	// for (int t=0; t<(int)(img.height());t++) {
+	//   std::cout << m_planeImages[plane]->at( img.height()*1+t);
+	// }
+	// std::cout << std::endl;	      
+	
+	
+	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
+      }//end of loop over planes
+      
+    }// end of image crop ranges
+    
+    //
+    // Determine bounding boxes
+    //
+    auto bboxes = findBoundingBoxes(e);
+    // each interaction has bounding boxes in each plane
+    auto const& the_range_v = region_v[0];
+    
+    int ibox = -1;
+    m_nfilledboxes = 0;
+    for ( auto const& range : bboxes ) {
+      // range is a RangeArray_t which is a vector< pair<int,int> >
+      // (x,y) = (wire, time 0toX)
+      ibox++;
+      
+      // stay within bounds
+      if ( range[fNPlanes].second<the_range_v[fNPlanes].first 
+	   || range[fNPlanes].first>the_range_v[fNPlanes].second )
+	continue;
+      
+      // calculate time bounds in cropped images coordinates
+      int t_lo = (int)range[fNPlanes].first  - (int)the_range_v[fNPlanes].first;
+      int t_hi = (int)range[fNPlanes].second - (int)the_range_v[fNPlanes].first;
+      
+      // enforce time bounds
+      t_lo = std::max( t_lo, 0 );
+      t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].second-(int)the_range_v[fNPlanes].first );
+      
+      for (int plane=0; plane<fNPlanes; plane++) {
+	// need to account for compression
+	// bounding box goes counter clockwise from origin
+	
+	int w_lo = (int)range[plane].first  - (int)the_range_v[plane].first;
+	int w_hi = (int)range[plane].second - (int)the_range_v[plane].first;
+	
+	// enforce image bounds
+	w_lo = std::max( w_lo, 0 );
+	w_hi = std::min( w_hi, (int)the_range_v[plane].second-(int)the_range_v[plane].first);
+	
+	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	  << "[Plane " << plane << " BBOX]"
+	  << " t=[" << (int)the_range_v[fNPlanes].first+t_lo << ", " << (int)the_range_v[fNPlanes].first+t_hi << "]"
+	  << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
+	  << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
+	  << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
+	
+	m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+	m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
+	
+	m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+	m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
+	
+	m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+	m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
+	
+	m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+	m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
+	
+	// save image for bbox
+	larcaffe::Image bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
+	
+	// compress image and bounding boxes
+	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
+	  bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kAverage );
+	}
+	m_bb_nticks = bbimg.height();
+	m_bb_nwires = bbimg.width();
+	
+	// transfer image to ROOT variables
+	m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
+	for ( int w=0; w<(int)bbimg.width(); w++) {
+	  for (int t=0; t<(int)bbimg.height(); t++) {
+	    m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
+	  }
+	}
+	
+      }//end of planes loop to fill bounding boxes
+      
+      // save this bbox!
+      m_bbox_label->push_back( m_interaction_list.at(ibox) );
+      sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
+      m_BBTree->Fill();
+      m_nfilledboxes++;
+      
+    }//end of loop over sets of bounding boxes for a given interaction
+    
+    // Finally fill the tree for this event
+    m_ImageTree->Fill();
+
   }// if RawDigits producer has been specified
   _time_prof_v[kANALYZE_TOTAL] += pWatchAnalyze.RealTime();
   _event_counter += 1;
