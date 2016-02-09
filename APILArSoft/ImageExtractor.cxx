@@ -55,20 +55,24 @@ namespace larcaffe {
       
       int nticks = time_range.second-time_range.first+1;
       int nwires = wire_range.second-wire_range.first+1;
-      art::ServiceHandle<geo::Geometry> geom;
 
+      /*
       std::cout << "Wire exxtration: " 
 		<< "t: " << nticks << " [" << time_range.first << ", " << time_range.second << "] "
 		<< "w: " << nwires << " [" << wire_range.first << ", " << wire_range.second << "] " << std::endl;
+      */
+      // Stuck with LArSoft
+      art::ServiceHandle<geo::Geometry> geom;
+
       larcaffe::Image img( nticks, nwires );
 
       for(auto const& wire : wires) {
 
-	unsigned int ch = wire.Channel();
-	auto const wire_id = geom->ChannelToWire(ch).front();	
+	auto const wire_id = geom->ChannelToWire(wire.Channel()).front();
+	
 	auto const plane = wire_id.Plane;
 
-	if( (int)plane != (int)planeid) continue;
+	if((int)plane != planeid) continue;
 	
 	bool inrange = (wire_range.first <= wire_id.Wire && wire_range.second >= wire_id.Wire);
 	if(!inrange) continue;
