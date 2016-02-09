@@ -57,6 +57,9 @@ namespace larcaffe {
       int nwires = wire_range.second-wire_range.first+1;
       art::ServiceHandle<geo::Geometry> geom;
 
+      std::cout << "Wire exxtration: " 
+		<< "t: " << nticks << " [" << time_range.first << ", " << time_range.second << "] "
+		<< "w: " << nwires << " [" << wire_range.first << ", " << wire_range.second << "] " << std::endl;
       larcaffe::Image img( nticks, nwires );
 
       for(auto const& wire : wires) {
@@ -78,11 +81,13 @@ namespace larcaffe {
 
 	  for(size_t tick = range.begin_index();
 	      time_range.first <= tick && tick <= time_range.second && tick < (range.begin_index() + adcs.size());
-	      ++tick)
+	      ++tick) {
 
-	    img.set_pixel( tick, wire_id.Wire - wire_range.first, adcs[tick-range.begin_index()]);
+	    std::cout << "fill: " << tick << " " << wire_id.Wire - wire_range.first << std::endl;
+	    img.set_pixel( tick-time_range.first, wire_id.Wire - wire_range.first, adcs[tick-range.begin_index()]);
+	  }
 
-	}
+	}  //loop over range
       }
 
       return img;
