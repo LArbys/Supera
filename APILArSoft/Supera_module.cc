@@ -175,7 +175,7 @@ Supera::Supera(fhicl::ParameterSet const & p)
   fhicl::ParameterSet filter_params = p.get< fhicl::ParameterSet >( "FilterConfigs" );
   for ( std::vector<std::string>::iterator it_string=filter_names.begin(); it_string!=filter_names.end(); it_string++ ) {
     std::string filter_name = *it_string;
-    ::larcaffe::supera::FilterBase* filter = ::larcaffe::supera::FilterBase::create( filter_name );
+    ::larcaffe::supera::FilterBase* filter = ::larcaffe::supera::FilterFactory::get()->create( filter_name );
     fhicl::ParameterSet params = filter_params.get< fhicl::ParameterSet >( filter_name );
     filter->configure( params );
     _filter_list.emplace_back( filter );

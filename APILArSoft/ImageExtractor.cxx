@@ -87,7 +87,7 @@ namespace larcaffe {
 	      time_range.first <= tick && tick <= time_range.second && tick < (range.begin_index() + adcs.size());
 	      ++tick) {
 
-	    std::cout << "fill: " << tick << " " << wire_id.Wire - wire_range.first << std::endl;
+	    //std::cout << "fill: " << tick << " " << wire_id.Wire - wire_range.first << std::endl;
 	    img.set_pixel( tick-time_range.first, wire_id.Wire - wire_range.first, adcs[tick-range.begin_index()]);
 	  }
 

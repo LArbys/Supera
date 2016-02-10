@@ -28,20 +28,14 @@ namespace larcaffe {
       
       
     };
-    
-    
-    class FilterEmptyImagesFactory : public FilterFactory {
+
+    class FilterEmptyImagesFactory : public FilterFactoryBase {
     public:
-      FilterEmptyImagesFactory() {
-	FilterBase::registerConcreteFactory( "FilterEmptyImages", this );
-      };
-      ~FilterEmptyImagesFactory() {};
-      
-      virtual FilterBase* create() { 
-	return new FilterEmptyImages;
-      };
+      FilterEmptyImagesFactory(){ FilterFactory::get()->add_factory("FilterEmptyImages",this); }
+      ~FilterEmptyImagesFactory(){}
+      FilterBase* create()
+      {return new FilterEmptyImages;}
     };
-      
 
   }
 

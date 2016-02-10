@@ -318,7 +318,7 @@ Yolo::Yolo(fhicl::ParameterSet const & p)
   fhicl::ParameterSet filter_params = p.get< fhicl::ParameterSet >( "FilterConfigs" );
   for ( std::vector<std::string>::iterator it_string=filter_names.begin(); it_string!=filter_names.end(); it_string++ ) {
     std::string filter_name = *it_string;
-    ::larcaffe::supera::FilterBase* filter = ::larcaffe::supera::FilterBase::create( filter_name );
+    ::larcaffe::supera::FilterBase* filter = ::larcaffe::supera::FilterFactory::get()->create( filter_name );
     fhicl::ParameterSet params = filter_params.get< fhicl::ParameterSet >( filter_name );
     filter->configure( params );
     _filter_list.emplace_back( filter );
@@ -740,6 +740,7 @@ void Yolo::analyze(art::Event const & e)
       t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].second-(int)the_range_v[fNPlanes].first );
       
       for (int plane=0; plane<fNPlanes; plane++) {
+
 	// need to account for compression
 	// bounding box goes counter clockwise from origin
 	
@@ -756,21 +757,25 @@ void Yolo::analyze(art::Event const & e)
 	  << " w=[" << (int)the_range_v[plane].first+w_lo << ", " << (int)the_range_v[plane].first+w_hi << "]"
 	  << " image bound: t=[" << the_range_v[fNPlanes].first << ", " << the_range_v[fNPlanes].second <<"]"
 	  << " w=[" << the_range_v[plane].first << ", " << the_range_v[plane].second << "]" << std::endl;
-	
+
 	m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
 	m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
-	
+
 	m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
 	m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
-	
+
 	m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
 	m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
-	
+
 	m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
 	m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
-	
+
 	// save image for bbox
-	larcaffe::Image bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
+	larcaffe::Image bbimg;
+	if ( fUseWire )
+	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *wireVecHandle );
+	else
+	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
 	
 	// compress image and bounding boxes
 	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
@@ -778,7 +783,7 @@ void Yolo::analyze(art::Event const & e)
 	}
 	m_bb_nticks = bbimg.height();
 	m_bb_nwires = bbimg.width();
-	
+
 	// transfer image to ROOT variables
 	m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
 	for ( int w=0; w<(int)bbimg.width(); w++) {
@@ -786,7 +791,7 @@ void Yolo::analyze(art::Event const & e)
 	    m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
 	  }
 	}
-	
+
       }//end of planes loop to fill bounding boxes
       
       // save this bbox!

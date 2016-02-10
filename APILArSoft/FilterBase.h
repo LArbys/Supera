@@ -38,21 +38,6 @@ namespace larcaffe {
       virtual void configure( fhicl::ParameterSet const & p ) = 0;                //< user function to configure class before applying filter -- called by Supera_module
       virtual bool doWeKeep( const ::larcaffe::supera::converter_base&  ) = 0; //< apply filter -- called by Supera_module
 
-      static void registerConcreteFactory( const std::string& name, FilterFactory* factory ) {
-	_factories[ name ] = factory;
-      };
-      static FilterBase* create( std::string name ) {
-	std::map< std::string, FilterFactory* >::iterator it=_factories.find(name);
-	if ( it==_factories.end() ) {
-	  std::cout << "Fitler with name '" << name << "' was not registered." << std::endl;
-	  throw ::larcaffe::larbys();
-	}
-	return (*it).second->create();
-      };
-
-    private:
-      static std::map< std::string, FilterFactory* > _factories;
-
     };
 
   }
