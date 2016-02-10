@@ -59,6 +59,16 @@ namespace larcaffe {
 	auto boundary = WireTimeBoundary(mct);
 
 	// check if empty
+	
+	// if all are [0,0], useless
+	bool allzero = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    allzero = false;
+	    break;
+	  }
+	}
+	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
 	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
@@ -67,7 +77,7 @@ namespace larcaffe {
 	  }
 	}
 	
-	if ( isempty )
+	if ( isempty || allzero )
 	  continue;
 	
 	for(size_t i=0; i<result.size(); ++i) {
@@ -106,6 +116,16 @@ namespace larcaffe {
 	auto boundary = WireTimeBoundary(mct);
 
 	// check if empty
+	
+	// if all are [0,0], useless
+	bool allzero = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    allzero = false;
+	    break;
+	  }
+	}
+	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
 	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
@@ -113,8 +133,8 @@ namespace larcaffe {
 	    break;
 	  }
 	}
-
-	if ( isempty )
+	
+	if ( isempty || allzero )
 	  continue;
 	
 	for(size_t i=0; i<result.size(); ++i) {
@@ -132,17 +152,26 @@ namespace larcaffe {
 	
 	auto boundary = WireTimeBoundary(mcsh);
 
-
 	// check if empty
+	
+	// if all are [0,0], useless
+	bool allzero = true;
+	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
+	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	    allzero = false;
+	    break;
+	  }
+	}
+	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 || boundary[plane].first==larcaffe::kINVALID_UINT) {
+	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
 	    isempty = false;
 	    break;
 	  }
 	}
-
-	if ( isempty )
+	
+	if ( isempty || allzero )
 	  continue;
 	
 	for(size_t i=0; i<result.size(); ++i) {

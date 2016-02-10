@@ -682,7 +682,7 @@ void Yolo::analyze(art::Event const & e)
 	if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
 	  plane_compression[plane] = img.width()/_cropper.TargetWidth();
 	  plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
-	  img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kAverage );
+	  img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kMaxPool );
 	}
 	
 	// std::cout << "[Check Compressed Image]" << std::endl;
@@ -779,7 +779,7 @@ void Yolo::analyze(art::Event const & e)
 	
 	// compress image and bounding boxes
 	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
-	  bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kAverage );
+	  bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kMaxPool );
 	}
 	m_bb_nticks = bbimg.height();
 	m_bb_nwires = bbimg.width();
