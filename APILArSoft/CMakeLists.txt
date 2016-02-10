@@ -9,7 +9,7 @@ include_directories ( $ENV{PROTOBUF_INCDIR} $ENV{LMDB_INCDIR} $ENV{LARCAFFE_INCD
 
 link_libraries( ${LIB_NAME} -L$ENV{BOOST_LIB} -lboost_system ${ROOTLIB} ${SUPERA_LIB})
 
-#add_subdirectory(job)
+add_subdirectory(train_singlep)
 
 art_make( BASENAME_ONLY
 	  LIBRARY_NAME     uboone_Supera
