@@ -770,7 +770,11 @@ void Yolo::analyze(art::Event const & e)
 	m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
 	
 	// save image for bbox
-	larcaffe::Image bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
+	larcaffe::Image bbimg;
+	if ( fUseWire )
+	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *wireVecHandle );
+	else
+	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
 	
 	// compress image and bounding boxes
 	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
