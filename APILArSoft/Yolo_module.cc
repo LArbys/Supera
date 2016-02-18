@@ -40,6 +40,7 @@
 
 #include "Geometry/Geometry.h" //LArCore
 #include "Utilities/DetectorProperties.h" // LArData
+#include "Utilities/LArProperties.h"
 #include "RawData/RawDigit.h" // LArData
 #include "Simulation/SimChannel.h" // LArSim
 #include "SimulationBase/GTruth.h" // NuTools
@@ -128,6 +129,8 @@ private:
   int m_run; //< run ID
   int m_nfilledboxes;
   float m_Enu; //< neutrino energy (0 if cosmic)
+  std::vector<float> m_vertex;
+  std::vector<int> m_vertex_tw;
   int m_mode; //< interaction mode (-1 if cosmic)
   int m_nuscatter; // neutrino scattering code
   int m_flavor; //< neutrino flavor (-1 if cosmic)
@@ -525,7 +528,14 @@ void Yolo::getMCTruth( art::Event const & e ) {
     m_interaction = -1;
     m_nuscatter = -1;
     m_Enu = 0.0;
-    return;
+    const std::vector<simb::MCTruth>& genie = *gentruth;
+    m_Enu = genie.at(0).GetParticle(0).E();
+    m_vertex.resize(4, 0.0 );
+    m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
+    m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
+    m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
+    m_vertex.at(3) = genie.at(0).GetParticle(0).T();
+
   }
   else {
   
@@ -542,11 +552,42 @@ void Yolo::getMCTruth( art::Event const & e ) {
     
     // Get neutrino energy
     m_Enu = genie.at(0).GetNeutrino().Nu().E();
+
+    // Get Vertex
+    m_vertex.resize(4, 0.0);
+    m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
+    m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
+    m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
+    m_vertex.at(3) = genie.at(0).GetParticle(0).T();
+
   }
 
-}
+  // Get Vertex in terms of time and wire
+  art::ServiceHandle<geo::Geometry> geom;
+  art::ServiceHandle<util::LArProperties> larp;
+  art::ServiceHandle<util::TimeService> ts;
+  //art::ServiceHandle<util::DetectorProperties> detp;
+  const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns                                                                                                                     
+  //const int tick_max = detp->NumberTimeSamples();
 
-		   
+  m_vertex_tw.resize(geom->Nplanes()+1,0);
+  for (size_t iplane=0; iplane<geom->Nplanes(); iplane++) {
+    geo::WireID wire_id;
+    try {
+      wire_id = geom->NearestWireID(m_vertex.data(), iplane);
+    }
+    catch (geo::InvalidWireIDError& err) {
+      //std::cout << "out of bounds. using better number" << std::endl;
+      wire_id.Wire = err.better_wire_number;
+    }
+    m_vertex_tw.at(iplane) = wire_id.Wire;
+  }  
+  int tick = (int)(ts->TPCG4Time2Tick(m_vertex.at(3) + (m_vertex.at(0) / drift_velocity))) + 1;
+  m_vertex_tw.at(3) = tick;
+  
+}
+  
+
 
 void Yolo::analyze(art::Event const & e)
 {
@@ -575,7 +616,9 @@ void Yolo::analyze(art::Event const & e)
   getMCTruth( e );
   
   // Label
-  if ( m_mode==-1 )
+  if ( fSingleParticleMode )
+    sprintf(m_label, "%s_%d_%d_%d", singlepname.c_str(), m_run, m_subrun, m_event );
+  else if ( fCosmicsMode )
     sprintf(m_label, "cosmics_%d_%d_%d", m_run, m_subrun, m_event );
   else
     sprintf(m_label, "nu_%d_%d_%d_mode_%d", m_run, m_subrun, m_event, m_mode );
@@ -678,13 +721,16 @@ void Yolo::analyze(art::Event const & e)
 	//   continue;
 	//}
 	
-	// compress image and bounding boxes
+	// compress image
 	if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
 	  plane_compression[plane] = img.width()/_cropper.TargetWidth();
 	  plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
 	  img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kMaxPool );
 	}
 	
+	// also need to transform vertex_tw into (time,wire) coordinates of this cropped image (filled already in getMC above)
+	m_vertex_tw.at(plane) = (int)(m_vertex_tw.at(plane)-wire_range.first)/plane_compression[plane];
+
 	// std::cout << "[Check Compressed Image]" << std::endl;
 	// for (int t=0; t<(int)(img.height());t++) {
 	//   std::cout << img.pixel( t, 1 ) << " ";
@@ -709,6 +755,9 @@ void Yolo::analyze(art::Event const & e)
 	
 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
       }//end of loop over planes
+      
+      // convert time coordinate
+      m_vertex_tw.at(fNPlanes) = (int)(m_vertex_tw.at(fNPlanes)-time_range.first)/plane_compression[fNPlanes];
       
     }// end of image crop ranges
     
@@ -866,6 +915,8 @@ void Yolo::setupTrees(int nplanes) {
   m_ImageTree->Branch( "subrun", &m_subrun, "subrun/I" );
   m_ImageTree->Branch( "event", &m_event, "event/I" );
   m_ImageTree->Branch( "Enu", &m_Enu, "Enu/F" );
+  m_ImageTree->Branch( "vertex", &m_vertex );
+  m_ImageTree->Branch( "vertex_tw", &m_vertex_tw );
   m_ImageTree->Branch( "mode", &m_mode, "mode/I" );
   m_ImageTree->Branch( "nuscatter", &m_nuscatter, "nuscatter/I" );
   m_ImageTree->Branch( "interaction", &m_interaction, "interaction/I" );
@@ -883,7 +934,9 @@ void Yolo::setupTrees(int nplanes) {
   m_BBTree->Branch( "event", &m_event, "event/I" );
   m_BBTree->Branch( "ibox", &m_nfilledboxes, "ibox/I" );
   m_BBTree->Branch( "label", m_bblabel, "label[100]/C" );
-  
+  m_BBTree->Branch( "Enu", &m_Enu, "Enu/F" );
+  m_BBTree->Branch( "vertex", &m_vertex );
+  m_BBTree->Branch( "vertex_tw", &m_vertex_tw );
 
   // Bounding Box Branches: one for each plane
   // ugh, these branches are such bad code...
