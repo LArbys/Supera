@@ -86,6 +86,7 @@ public:
 
   enum TimeProfCategory_t {
     kIO_LARSOFT,
+    kIO_MCTRACK,
     kIO_CROPPER,
     kIO_STORAGE,
     kANALYZE_TOTAL,
@@ -363,7 +364,6 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
   TStopwatch fWatch; fWatch.Start();
   art::Handle<std::vector<sim::MCTrack> > mctHandle;
   e.getByLabel("mcreco",mctHandle);
-  _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
   if(!mctHandle.isValid()) {
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
     throw ::larcaffe::larbys();
@@ -374,69 +374,32 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
     _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
     throw ::larcaffe::larbys();
   }
-
+  _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
 
   // create sets of interactions
-
-  // find particle ID of primaries of neutrino interaction
-  std::map<unsigned int,std::vector<sim::MCTrack> > nu_interaction_tracks;
-  std::map<unsigned int,std::vector<sim::MCShower> > nu_interaction_showers;
+  larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
 
   // dump neutrino
   art::Handle< std::vector<simb::MCTruth> > gentruth;
   e.getByLabel( "generator", gentruth );
   // validity check should go here
   const std::vector<simb::MCTruth>& genie = *gentruth;
-  for (int i=0; i<genie.at(0).NParticles();i++) {
-    std::cout << genie.at(0).GetParticle(i) << std::endl;
+  fWatch.Start();
+  for (int ineutrino=0; ineutrino<(int)genie.size(); ineutrino++) {
+    std::vector<simb::MCParticle> nu_tracks;
+    for (int i=0; i<genie.at(ineutrino).NParticles();i++) {
+      std::cout << genie.at(ineutrino).GetParticle(i) << std::endl;
+      nu_tracks.push_back( genie.at(ineutrino).GetParticle(i) );
+    }
+    particletree.addNeutrino( nu_tracks );
   }
+  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
   
-
-  // start with tracks
-  std::map<unsigned int,std::vector<sim::MCTrack> > interaction_m;
-
-  for(auto const& mct : *mctHandle) {
-    
-    std::cout << "mctrack: id=" << mct.TrackID() << " pdg=" << mct.PdgCode() << " " << mct.Process() << " ancestor=" << mct.AncestorTrackID()  << std::endl;
-    // we skip the neutrons
-    if ( fSkipNeutrons && mct.PdgCode()==2112 )
-      continue;
-
-    auto iter = interaction_m.find(mct.AncestorTrackID());
-    // if no ancestor found, add it to map
-    if( iter == interaction_m.end() )
-      iter = interaction_m.emplace(mct.AncestorTrackID(),std::vector<sim::MCTrack>()).first;
-    
-    // otherwise, add it to the vector of mctracks
-    (*iter).second.push_back(mct);
-  }
-  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Made " << interaction_m.size() << " interaction groups to crop around" << std::endl;
-
-  // get shower info
-  std::set< unsigned int > decaytracks; // decay information
-  std::map<unsigned int,std::vector<sim::MCShower> > shower_m;
-  shower_m.emplace( 0, std::vector<sim::MCShower>() );
-  for(auto const& mcsh : *mcshHandle) {
-    std::cout << "mcshower: id=" << mcsh.TrackID() << " pdg=" << mcsh.PdgCode() << " " << mcsh.Process() << " ancestor=" << mcsh.AncestorTrackID()  << std::endl;
-    // look for decays
-    if ( std::string(mcsh.Process())=="Decay" ) {
-      auto ittrack=interaction_m.find( mcsh.AncestorTrackID() );
-      if ( ittrack!=interaction_m.end() ) {
-	// matching
-	decaytracks.insert( mcsh.AncestorTrackID() );
-      }
-    }
-    // load all showers in neutrino mode
-    if ( fGroupAllInteractions ) {
-      auto iter = shower_m.find(0);
-      (*iter).second.push_back(mcsh);
-    }
-  }
-
   // Parse Shower and Track info and bundle them by ancestor
-  larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
+  fWatch.Start();
   particletree.parse();
   particletree.boom();
+  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
 
   //   // now find bounding box of each interaction
   //   m_interaction_list.clear();
@@ -879,8 +842,9 @@ void BNBCosmics::endJob() {
       << "Simple time profile record" << std::endl
       << "        [0] analyze time total ... " << _time_prof_v[kANALYZE_TOTAL] / _event_counter << " [sec/event] " << std::endl
       << "        [1] IO LArSoft ........... " << _time_prof_v[kIO_LARSOFT]    / _event_counter << " [sec/event] " << std::endl
-      << "        [2] IO Cropper ........... " << _time_prof_v[kIO_CROPPER]    / _event_counter << " [sec/event] " << std::endl
-      << "        [3] IO Storage ........... " << _time_prof_v[kIO_STORAGE]    / _event_counter << " [sec/event] " << std::endl
+      << "        [2] MC Track grouping .... " << _time_prof_v[kIO_MCTRACK]    / _event_counter << " [sec/event] " << std::endl
+      << "        [3] IO Cropper ........... " << _time_prof_v[kIO_CROPPER]    / _event_counter << " [sec/event] " << std::endl
+      << "        [4] IO Storage ........... " << _time_prof_v[kIO_STORAGE]    / _event_counter << " [sec/event] " << std::endl
       << std::endl
       << "        [*] Unaccounted time ([0]-rest) ... " << diff / _event_counter << " [sec/event] " << std::endl
       << std::endl;
