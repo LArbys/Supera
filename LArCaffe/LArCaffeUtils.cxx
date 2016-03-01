@@ -4,8 +4,16 @@
 
 namespace larcaffe {
 
-  bool RangeEmpty(const larcaffe::Range_t& r)
-  { return r.isFilled(); }
+  bool RangeFilled(const larcaffe::Range_t& r)
+  {
+    if ( r.start==kINVALID_UINT && r.end==0 ) return false;
+    return r.isFilled();
+  }
+  
+  bool RangeEmpty( const larcaffe::Range_t& r ) {
+    if ( r.start==0 && r.end==0 )return true;
+    return false;
+  }
 
   bool RangeValidity(const larcaffe::Range_t& r)
   { return (r.start <= r.end); }
@@ -43,4 +51,27 @@ namespace larcaffe {
     return res;
   }
 
+  bool RangesOK( const RangeArray_t& ranges ) {
+    for (int i=0; i<(int)ranges.size(); i++) {
+      if ( !RangeValidity(ranges.at(i)) || RangeEmpty(ranges.at(i)) || !RangeFilled(ranges.at(i)) ) {
+	return false;
+      }
+    }
+    return true;
+  }
+
+  void PrintRangeArray( const RangeArray_t& ranges ) {
+    std::cout << "RangeArray: ";
+    for (int i=0; i<(int)ranges.size(); i++) {
+      std::cout << " (" << i << ") ";
+      
+      std::cout << " [" << ranges.at(i).start << "," << ranges.at(i).end << "]";
+      if (ranges.at(i).isFilled() )
+	std::cout << ":filled";
+      else
+	std::cout << ":unfilled";
+    }
+    std::cout << std::endl;
+  }
+  
 }
