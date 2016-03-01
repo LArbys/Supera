@@ -9,6 +9,7 @@
 #include "MCBase/MCStep.h"
 
 #include "LArCaffe/larbys.h"
+#include "LArCaffe/LArCaffeUtils.h"
 
 #include "TLorentzVector.h" // ROOT
 
@@ -250,8 +251,9 @@ namespace larcaffe {
 	  
 	  if(result[plane].start  > wire_id.Wire) result[plane].start  = wire_id.Wire;
 	  if(result[plane].end < wire_id.Wire) result[plane].end = wire_id.Wire;
-
+	  result[plane].setFilled();
 	}
+	result.back().setFilled();
 	if(logger().info() ) {
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
 	    << "x=" << xyz[0]
@@ -315,8 +317,6 @@ namespace larcaffe {
       std::vector< TLorentzVector > step_v;
       step_v.push_back( detprofile.Position() );
       step_v.push_back( showerend );
-      // step_v.push_back( mcsh.AncestorStart() );
-      // step_v.push_back( mcsh.AncestorEnd() );
       
       for(auto& step : step_v) {
 	
@@ -358,11 +358,12 @@ namespace larcaffe {
 	  
 	    if(result[plane].start  > wire_id.Wire) result[plane].start  = wire_id.Wire;
 	    if(result[plane].end < wire_id.Wire) result[plane].end = wire_id.Wire;
-
+	    result[plane].setFilled();
 	  }
 	  catch(...) {continue;}
 
 	}
+	result.back().setFilled();
 
 	if(logger().info() ) {
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
@@ -408,14 +409,15 @@ namespace larcaffe {
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
-      //for( int istep=0; istep<(int)mct.NumberTrajectoryPoints(); istep++ ) {
       for ( auto &traj : mct.Trajectory() ) {
 	
 	// Figure out time
-	//int tick = (unsigned int)(ts->TPCG4Time2Tick( mct.T(istep) + ( mct.Vx(istep) / drift_velocity))) + 1;
 	int tick = (unsigned int)(ts->TPCG4Time2Tick( traj.first.T() + ( traj.first.X() / drift_velocity))) + 1;
 
-	if(tick < 0 || tick >= tick_max) continue;
+	if(tick < 0 || tick >= tick_max) {
+	  std::cout << "out of time tick range: " << tick << std::endl;
+	  continue;
+	}
 	
 	auto& trange = result.back();
 	if(trange.start  > (unsigned int)tick) trange.start  = tick;
@@ -435,6 +437,7 @@ namespace larcaffe {
 	    wire_id = geom->NearestWireID(xyz, plane);
 	  }
 	  catch (geo::InvalidWireIDError& err) {
+	    std::cout << "Invalid Wire (x,y,z)=(" << xyz[0] << ", " << xyz[1] << ", " << xyz[2] << ")" << std::endl;
 	    wire_id.Wire = err.better_wire_number;
 	  }
 	  catch (...) {
@@ -544,16 +547,17 @@ namespace larcaffe {
       // if inconsistent we throw
 
       // never filled
-      if ( range.start==larcaffe::kINVALID_UINT && range.end==0 ) {
-	Range_t emptyrange;
-	emptyrange.start = emptyrange.end = 0;
+      if ( larcaffe::RangeEmpty(range)  ) {
+	//std::cout << "Empty Range" << std::endl;
+	Range_t emptyrange(0,0);
 	return emptyrange;
       }
-      // if ( range.start==0 && range.end==0 ) {
-      // 	Range_t emptyrange;
-      // 	emptyrange.start = emptyrange.end = 0;
-      //   return emptyrange;
-      // }
+      
+      if ( !larcaffe::RangeValidity(range) ) {
+	//std::cout << "Invalid Range" << std::endl;
+	Range_t emptyrange(0,0);
+	return emptyrange;
+      }
 
       if(range.end < range.start) {
 	logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
@@ -590,14 +594,14 @@ namespace larcaffe {
 	    << "Image lower bound (" << range.start << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")" << std::endl;
 	return result;
       }
-
-      // if(!range.start && !range.end) {
-      // 	if(logger().info()) 
-      // 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
-      // 	    << "Zero range provided. Nothing to format... " << std::endl;
-      // 	return result;
-      // }
       
+      // checks are over
+      result.setFilled();
+
+      if(logger().debug())
+	logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+          << "Set bounds: target " << target_width  << std::endl;
+
       const int center = ( range.start  + range.end ) / 2;
 
       int upper_bound, lower_bound;
@@ -721,16 +725,13 @@ namespace larcaffe {
 	else
 	  assert(false);
 
-	bool isempty = true;
-	for ( size_t plane=0; plane<particlebounds.size(); plane++ ) {
-	  if ( particlebounds.at(plane).isFilled() ) {
-	    isempty = false;
-	    break;
-	  }
-	}
-	
-	if ( isempty )
+	//std::cout << "individual track/shower: ";
+	larcaffe::PrintRangeArray( particlebounds );
+
+	if ( !larcaffe::RangesOK( particlebounds ) ) {
+	  //std::cout << "Range rejected for use" << std::endl;
 	  continue;
+	}
 
 	for(size_t i=0; i<result.size(); ++i) {
 

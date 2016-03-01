@@ -160,14 +160,22 @@ namespace larbys {
     // MCParticleTree
     // ----------------------------------------------------------------
     
-    void MCParticleTree::addNeutrino( const std::vector<simb::MCParticle>& particlemap ) {
-      num_neutrinos++;
-      int nu_id = -num_neutrinos;
-      m_bundles.emplace( nu_id, std::vector<MCPTInfo>() ).first;
-      for ( std::vector<simb::MCParticle>::const_iterator it_particle=particlemap.begin(); it_particle!=particlemap.end(); it_particle++ ) {
-	MCPTInfo primary( it_particle-particlemap.begin(), &(*it_particle) );
-	m_bundles[nu_id].emplace_back( primary );
-      }      
+    void MCParticleTree::addNeutrinoInteraction( const simb::MCTruth& interaction ) {
+
+      std::vector< MCPTInfo > interaction_out;
+      for ( int iparticle=0; iparticle<interaction.NParticles(); iparticle++ ) {
+	//std::cout << "MCParticleTree, adding neutrino interactoin particle: " << interaction.GetParticle(iparticle) << std::endl;
+	if ( interaction.GetParticle(iparticle).StatusCode()==1 ) {
+	  MCPTInfo primary( iparticle, &(interaction.GetParticle(iparticle)) );
+	  interaction_out.emplace_back( primary );
+	}
+      }
+      if ( interaction_out.size() ) {
+	num_neutrinos++;
+	int nu_id = -num_neutrinos;
+	m_bundles.emplace( nu_id, interaction_out ).first;
+	m_neutrino_interaction_particles[nu_id] = (int)interaction_out.size();
+      }
     }
     
     void MCParticleTree::parse() {
@@ -183,6 +191,10 @@ namespace larbys {
       // mc particles: we store this in one bundle
       // in the future, this needs to handle multiple neutrinos
 
+      // note: origin=1 means neutrino. for microboone, there is only one.  in sbnd, there might be two. but right now
+      // the mctrack/mcshower is not filled correctly to separate neutrino interactions
+      // so if we have origin one, we add to the neutrino group
+
       // MC Tracks
       for ( std::vector<sim::MCTrack>::const_iterator it_track=trackmap->begin(); it_track!=trackmap->end(); it_track++ ) {
 	
@@ -190,11 +202,22 @@ namespace larbys {
 	  // not a "primary", skip it
 	  continue;
 	}
-	
-	// store the ancestor, make a bundle vector
-	m_bundles.emplace( (*it_track).TrackID(), std::vector<MCPTInfo>() ).first;
-	MCPTInfo ancestor( it_track-trackmap->begin(),&(*it_track) );
-	m_bundles[(*it_track).TrackID()].emplace_back( ancestor );
+
+	if ( (*it_track).Origin()==1 ) {
+	  // neutrinos
+	  int nuid = -1;
+	  if ( m_bundles.find(nuid)==m_bundles.end() ) {
+	    m_bundles.emplace( -1, std::vector<MCPTInfo>() ).first;
+	  }
+	  MCPTInfo ancestor( it_track-trackmap->begin(),&(*it_track) );
+	  m_bundles[nuid].emplace_back( ancestor );
+	}
+	else {
+	  // store the ancestor, make a bundle vector
+	  m_bundles.emplace( (*it_track).TrackID(), std::vector<MCPTInfo>() ).first;
+	  MCPTInfo ancestor( it_track-trackmap->begin(),&(*it_track) );
+	  m_bundles[(*it_track).TrackID()].emplace_back( ancestor );
+	}
       }
       
       // showers
@@ -205,10 +228,21 @@ namespace larbys {
 	  continue;
 	}
 
-	// store the ancestor, make a bundle vector
-	m_bundles.emplace( (*it_shower).TrackID(), std::vector<MCPTInfo>() ).first;
-	MCPTInfo ancestor( it_shower-showermap->begin(),&(*it_shower) );
-	m_bundles[(*it_shower).TrackID()].emplace_back( ancestor );
+	if ( (*it_shower).Origin()==1 ) {
+	  // neutrinos
+	  int nuid = -1;
+	  if ( m_bundles.find(nuid)==m_bundles.end() ) {
+	    m_bundles.emplace( -1, std::vector<MCPTInfo>() ).first;
+	  }
+	  MCPTInfo ancestor( it_shower-showermap->begin(),&(*it_shower) );
+	  m_bundles[nuid].emplace_back( ancestor );
+	}
+	else {
+	  // store the ancestor, make a bundle vector
+	  m_bundles.emplace( (*it_shower).TrackID(), std::vector<MCPTInfo>() ).first;
+	  MCPTInfo ancestor( it_shower-showermap->begin(),&(*it_shower) );
+	  m_bundles[(*it_shower).TrackID()].emplace_back( ancestor );
+	}
       }
 
       // Connect Daughters to ancestors
@@ -218,35 +252,66 @@ namespace larbys {
       for ( std::vector<sim::MCTrack>::const_iterator it_sakura=trackmap->begin(); it_sakura!=trackmap->end(); it_sakura++ ) {
 	int daughterid = (*it_sakura).TrackID();
 	int motherid = (*it_sakura).AncestorTrackID();
-	if ( daughterid==motherid )
-	  continue; // a parent, which we've already stored above
+	if ( daughterid==motherid || (*it_sakura).Origin()==1 )
+	  continue; // a parent or neutrino, which we've already stored above
 
-	//auto iter_ancestor_bundle = m_bundles.find( motherid );
-	// if ( iter_ancestor_bundle==m_bundles.end() ) {
-	//   std::cout << "warning: daughter could not find mother. there should be no orphans? trackid=" << daughterid << " parentid=" << motherid << std::endl;
-	//   //assert(false);
-	// }
-	MCPTInfo particle( it_sakura-trackmap->begin(),&(*it_sakura) );
-	m_bundles[motherid].emplace_back( particle );
+	int origin = (*it_sakura).Origin();
+	if (origin==1 ) {
+	  // direct neutrino interaction daughter
+	  matchTrackToNeutrino( *it_sakura );
+	}
+	else {
+	  // cosmics daugher
+	  MCPTInfo particle( it_sakura-trackmap->begin(),&(*it_sakura) );
+	  m_bundles[motherid].emplace_back( particle );
+	}
       }
 	
       // find all daughters: showers
       for ( std::vector<sim::MCShower>::const_iterator it_sakura=showermap->begin(); it_sakura!=showermap->end(); it_sakura++ ) {
 	int daughterid = (*it_sakura).TrackID();
 	int motherid = (*it_sakura).AncestorTrackID();
-	if ( daughterid==motherid )
+	if ( daughterid==motherid || (*it_sakura).Origin()==1 )
 	  continue; // a parent, which we've already stored above
 
-	auto iter_ancestor_bundle = m_bundles.find( motherid );
-	if ( iter_ancestor_bundle==m_bundles.end() ) {
-	  std::cout << "daughter could not find mother. there should be no orphans? trackid=" << daughterid << " parentid=" << motherid << std::endl;
-	  assert(false);
+	int origin = (*it_sakura).Origin();
+	if (origin==1 ) {
+	  // direct neutrino interaction daughter
+	  matchShowerToNeutrino( *it_sakura );
 	}
-	MCPTInfo particle( it_sakura-showermap->begin(),&(*it_sakura) );
-	m_bundles[motherid].emplace_back( particle );
+	else {
+	  auto iter_ancestor_bundle = m_bundles.find( motherid );
+	  if ( iter_ancestor_bundle==m_bundles.end() ) {
+	    std::cout << "daughter could not find mother. there should be no orphans? trackid=" << daughterid << " parentid=" << motherid << std::endl;
+	    assert(false);
+	  }
+
+	  MCPTInfo particle( it_sakura-showermap->begin(),&(*it_sakura) );
+	  m_bundles[motherid].emplace_back( particle );
+	}
       }
 	
     }//end of mctrack/mcshower parser
+
+    void MCParticleTree::matchTrackToNeutrino( const sim::MCTrack& track ) {
+      for (int ineutrino=0; ineutrino<num_neutrinos; ineutrino++) {
+	int nuid = -(ineutrino+1);
+	if ( (int)track.AncestorTrackID()<m_neutrino_interaction_particles[nuid] ) {
+	  MCPTInfo particle( 0, &track );
+	  m_bundles[nuid].emplace_back( particle );
+	}
+      }
+    }
+
+    void MCParticleTree::matchShowerToNeutrino( const sim::MCShower& shower ) {
+      for (int ineutrino=0; ineutrino<num_neutrinos; ineutrino++) {
+	int nuid = -(ineutrino+1);
+	if ( (int)shower.AncestorTrackID()<m_neutrino_interaction_particles[nuid] ) {
+	  MCPTInfo particle( 0, &shower );
+	  m_bundles[nuid].emplace_back( particle );
+	}
+      }
+    }
     
     void MCParticleTree::boom() {
       std::cout << "[PARTICLE TREE: full tree]" << std::endl;

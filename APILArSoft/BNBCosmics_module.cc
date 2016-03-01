@@ -95,8 +95,17 @@ public:
 
 private:
 
+  void LoadDataHandles( const art::Event& e, 
+			art::Handle< std::vector<raw::RawDigit> >& digitVecHandle,
+			art::Handle< std::vector<recob::Wire> >& wireVecHandle );
   std::vector<larcaffe::RangeArray_t> setEventCrop(const art::Event& e);
-  std::vector<larcaffe::RangeArray_t> findBoundingBoxes(const art::Event& e);
+  void ExtractImage( const art::Event& e, const std::vector<larcaffe::RangeArray_t>& region_v, std::vector<int>& applied_plane_compression_factors );
+  std::vector<larcaffe::RangeArray_t> findBoundingBoxes(const art::Event& e, std::vector<int>& interaction_indices );
+  void processBoundingBoxes( const art::Event& e, 
+			     const std::vector<larcaffe::RangeArray_t>& bboxes, 
+			     const larcaffe::RangeArray_t& the_range_v, 
+			     const std::vector<int>& plane_compression,
+			     const std::vector<int>& interaction_indices );
   void getMCTruth( art::Event const & e );
   void clearBoundingBoxes();
 
@@ -121,18 +130,17 @@ private:
 
   // ----------------------------------------------------------------------
   // ROOT tree members
-  void setupTrees( int nplanes );
+  void setupTrees();
 
   TTree* m_ImageTree; //< whole image crop
   TTree* m_BBTree;    //< interaction image crop
   std::vector<int>** m_planeImages; //< [planeid][row-major 2D image]
-  int m_event; //< event ID
-  int m_subrun; //< subrun ID
-  int m_run; //< run ID
-  int m_nfilledboxes;
-  float m_Enu; //< neutrino energy (0 if cosmic)
-  std::vector<float> m_vertex;
-  std::vector<int> m_vertex_tw;
+  std::vector<int>* m_pmtImage; // [row-major 2D image]
+  int m_event; //< event ID (ImageTree,BBTree)
+  int m_subrun; //< subrun ID (ImageTree,BBTree)
+  int m_run; //< run ID (ImageTree,BBTree)
+  int m_nfilledboxes; // (ImageTree)
+  float m_Enu; //< neutrino energy (energy of primary for cosmics or single particles) (ImageTree)
   int m_mode; //< interaction mode (-1 if cosmic)
   int m_nuscatter; // neutrino scattering code
   int m_flavor; //< neutrino flavor (-1 if cosmic)
@@ -150,20 +158,24 @@ private:
   // bounding boxes: stuck doing this because want to make flat branch tree
   
   // for events
-  std::vector<int>** m_plane_bb_loleft_t;
-  std::vector<int>** m_plane_bb_loleft_w;
-  std::vector<int>** m_plane_bb_hileft_t;
-  std::vector<int>** m_plane_bb_hileft_w;
-  std::vector<int>** m_plane_bb_loright_t;
-  std::vector<int>** m_plane_bb_loright_w;
-  std::vector<int>** m_plane_bb_hiright_t;
-  std::vector<int>** m_plane_bb_hiright_w;
-  std::vector<std::string>* m_bbox_label;
-  std::vector<int>** m_bb_planeImages;
+  std::vector<int>** m_plane_bb_loleft_t; // (ImageTree)
+  std::vector<int>** m_plane_bb_loleft_w; // (ImageTree)
+  std::vector<int>** m_plane_bb_hileft_t; // (ImageTree)
+  std::vector<int>** m_plane_bb_hileft_w; // (ImageTree)
+  std::vector<int>** m_plane_bb_loright_t; // (ImageTree)
+  std::vector<int>** m_plane_bb_loright_w; // (ImageTree)
+  std::vector<int>** m_plane_bb_hiright_t; // (ImageTree)
+  std::vector<int>** m_plane_bb_hiright_w; // (ImageTree)
+  std::vector<std::string>* m_bbox_label;  // (ImageTree)
+  std::vector<float>* m_plane_bb_3D_vertex;   //< the true vertex in 3D space of bounding box (ImageTree)
+  std::vector<int>**   m_plane_bb_vertexpixel_tw; // (ImageTree)
+
+
   char m_label[50];
 
-  // for individual bounding boxes
-  int* m_plane_bbinteraction_loleft_t;
+  // for individual bounding boxes tree
+  std::vector<int>** m_bb_planeImages; // [planeid][row-major 2D Image, unrolled] (BBtree)
+  int* m_plane_bbinteraction_loleft_t; 
   int* m_plane_bbinteraction_loleft_w;
   int* m_plane_bbinteraction_hiright_t;
   int* m_plane_bbinteraction_hiright_w;
@@ -231,39 +243,6 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
       << "Unexpected Image source, " << fImageSource << ". choices: RawDigit, Wire, Hit." << std::endl;
     throw ::larcaffe::larbys();    
   }
-
-  // cropper hard limit (dependent on cropper params)
-  std::vector<std::pair<int,int> > range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitRange");
-  if(range_v.size() != (geom->Nplanes() + 1)) {
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
-      << "HardLimitRange must be length " << geom->Nplanes() + 1 << " (wire plane count + 1 for time)!" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-  _wiretime_range_hard_v.resize( range_v.size() );
-  for(size_t plane=0; plane<range_v.size(); ++plane) {
-    if ( range_v.at(plane).first<0 ) {
-      // unspecified
-      if ( (int)plane<fNPlanes ) {
-	// unspecified wires: we take all of them (that will fit in multiple of target size)
-	_wiretime_range_hard_v.at(plane).start = 0;
-	int nfactors = (geom->Nwires(plane))/_cropper.TargetWidth();
-	_wiretime_range_hard_v.at(plane).end = nfactors*_cropper.TargetWidth() - 1;
-	// maybe i should center this
-      }
-      else {
-	_logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Time ticks need hard range" << std::endl;
-	throw ::larcaffe::larbys();
-      }
-    }
-    else {
-      // specified range
-      _wiretime_range_hard_v.at(plane).start  = (unsigned int)range_v.at(plane).first;
-      _wiretime_range_hard_v.at(plane).end = (unsigned int)range_v.at(plane).second;
-    }
-    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-      << "setting hard limit for plane=" << plane 
-      << ": " << _wiretime_range_hard_v.at(plane).start << " " << _wiretime_range_hard_v.at(plane).end << std::endl;
-  }
   
   // cropper parameters
   fhicl::ParameterSet cropper_params = p.get<fhicl::ParameterSet>("EventCropperConfig");
@@ -317,6 +296,43 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
       << ") ... must be length 5 unsigned int array" << std::endl;
     throw ::larcaffe::larbys();
   }
+
+  // set cropper hard limit (dependent on cropper params)
+  std::vector<std::pair<int,int> > range_v = p.get<std::vector<std::pair<int,int> > >("HardLimitRange");
+  if(range_v.size() != (geom->Nplanes() + 1)) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "HardLimitRange must be length " << geom->Nplanes() + 1 << " (wire plane count + 1 for time)!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  _wiretime_range_hard_v.resize( range_v.size() );
+  for(size_t plane=0; plane<range_v.size(); ++plane) {
+    if ( range_v.at(plane).first<0 ) {
+      // unspecified
+      if ( (int)plane<fNPlanes ) {
+	// unspecified wires: we take all of them (that will fit in multiple of target size)
+	_wiretime_range_hard_v.at(plane).start = 0;
+	int nfactors = (geom->Nwires(plane))/_cropper.TargetWidth();
+	if ( geom->Nwires(plane)%_cropper.TargetWidth()!=0 )
+	  nfactors+=1;
+	_wiretime_range_hard_v.at(plane).end = nfactors*_cropper.TargetWidth() - 1;
+	// maybe i should center this
+      }
+      else {
+	_logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Time ticks need hard range" << std::endl;
+	throw ::larcaffe::larbys();
+      }
+    }
+    else {
+      // specified range
+      _wiretime_range_hard_v.at(plane).start  = (unsigned int)range_v.at(plane).first;
+      _wiretime_range_hard_v.at(plane).end = (unsigned int)range_v.at(plane).second;
+    }
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+      << "setting hard limit for plane=" << plane 
+      << ": " << _wiretime_range_hard_v.at(plane).start << " " << _wiretime_range_hard_v.at(plane).end << std::endl;
+    _wiretime_range_hard_v.at(plane).setFilled();
+  }
+  larcaffe::PrintRangeArray( _wiretime_range_hard_v );
   
   // setup filters: can remove images
   std::vector<std::string> filter_names = p.get< std::vector<std::string> >( "ImageFilters" );
@@ -330,7 +346,7 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
   }
   
   // setup output Trees
-  setupTrees( fNPlanes );
+  setupTrees();
   
   
 }
@@ -351,11 +367,13 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::setEventCrop(const art::Event& e
   return image_v;
 }
 
-std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Event& e) 
+std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Event& e, std::vector<int>& interaction_indices ) 
 {
   // we group tracks belong to same interaction and make a bounding box for it
   // we need to group cosmic rays and neutrino interactions
   // the hardest part of this code
+  // returns bounding box. a vector of the interaction indices (MCParticleTree.m_bundle) is also returned in case one wants
+  //  to do stuff with the interactions. (and we do, we will determine the vertices for each)
 
   art::ServiceHandle<geo::Geometry> geom;
 
@@ -379,21 +397,16 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
   // create sets of interactions
   larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
 
-  // dump neutrino
-  art::Handle< std::vector<simb::MCTruth> > gentruth;
-  e.getByLabel( "generator", gentruth );
-  // validity check should go here
-  const std::vector<simb::MCTruth>& genie = *gentruth;
-  fWatch.Start();
-  for (int ineutrino=0; ineutrino<(int)genie.size(); ineutrino++) {
-    std::vector<simb::MCParticle> nu_tracks;
-    for (int i=0; i<genie.at(ineutrino).NParticles();i++) {
-      //std::cout << genie.at(ineutrino).GetParticle(i) << std::endl;
-      nu_tracks.push_back( genie.at(ineutrino).GetParticle(i) );
-    }
-    particletree.addNeutrino( nu_tracks );
-  }
-  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
+  // neutrino interactions from MCTruth
+  // art::Handle< std::vector<simb::MCTruth> > gentruth;
+  // e.getByLabel( "generator", gentruth );
+  // // below is not needed
+  // const std::vector<simb::MCTruth>& genie = *gentruth;
+  // fWatch.Start();
+  // for (int ineutrino=0; ineutrino<(int)genie.size(); ineutrino++) {
+  //   particletree.addNeutrinoInteraction( genie.at(ineutrino) );
+  // }
+  // _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
   
   // Parse Shower and Track info and bundle them by ancestor
   fWatch.Start();
@@ -402,69 +415,155 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
   _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
 
   m_interaction_list.clear();
+  interaction_indices.clear();  
   for ( std::map< int, std::vector<larbys::supera::MCPTInfo> >::iterator it_bundle=particletree.m_bundles.begin(); it_bundle!=particletree.m_bundles.end(); it_bundle++ ) {
     // now find bounding box of each interaction
     auto range_array = _cropper_interaction.Format( _cropper_interaction.WireTimeBoundary( (*it_bundle).second ) );
-  //   for(auto const& int_pair : interaction_m) {
     
-  //     auto range_array = _cropper_interaction.Format(_cropper_interaction.WireTimeBoundary(int_pair.end, shower_m[0]));
+    if ( (*it_bundle).first<0 )
+      std::cout << "[neutrino] ";
+    else
+      std::cout << "[cosmic] ";
 
-  //     // determine what the interaction is
-  //     std::stringstream ss;
-  //     if ( fSingleParticleMode ) {
-  // 	ss << singlepname;
-  //     }
-  //     else if ( fCosmicsMode ){
-  // 	const sim::MCTrack& mct0 = int_pair.end.at(0);
-  // 	if ( std::abs(mct0.PdgCode())==13 ) {
-  // 	  // muon
-  // 	  ss << "cosmic_muon";
-  // 	  if ( int_pair.second.size()>1 ) {
-  // 	    auto itmatch = decaytracks.find( int_pair.first );
-  // 	    if ( itmatch!=decaytracks.end() )
-  // 	      ss << "_decay";
-  // 	  }//end of if not single muon only
-  // 	}//end of if muon
-  // 	else if ( std::abs(mct0.PdgCode())==2212 )  {
-  // 	  ss << "cosmic_proton";
-  // 	}
-  // 	else if ( std::abs(mct0.PdgCode())==11 ) {
-  // 	  ss << "cosmic_shower";
-  // 	}
-  // 	else 
-  // 	  ss << "cosmic_other";
-  //     }//end of if cosmics
-  //     else {
-  // 	// neutrino mode
-  // 	ss << "neutrino_mode" << m_mode << "_flux" << m_flavor;
-  //     }
+    if ( !larcaffe::RangesOK( range_array ) ) {
+      std::cout << "Range of bundle is empty or invalid." << std::endl;
+      continue;
+    }
+    else {
+      std::cout << "Valid Interaction Bundle: ";
+      larcaffe::PrintRangeArray( range_array );
+    }
 
-  //     m_interaction_list.push_back( ss.str() );
-
-  //     auto const& time_range = range_array.back();
-    
-  //     for( size_t plane=0; plane < geom->Nplanes(); ++plane ) {
-
-  // 	auto const& wire_range = range_array[plane];
-
-  // 	if(wire_range.start < wire_range.end && time_range.start < time_range.end) {
-	
-  // 	  image_v.push_back(range_array);
-
-  // 	  break;
-	
-  // 	}
-      
-  //     }
-    
-  //   }//end of interaction loop
-  // }//end of if not group all interactions
+    image_v.push_back( range_array ); // we put it into the collection
+    interaction_indices.push_back( (*it_bundle).first );
+    // simple for now, but future we want cosmic_muon, cosmic_muon_wdecaye, cosmic_muon_wpizero, cosmic_emshower, cosmic_hadronic, cosmic_hadronic_wpizero
+    if ( (*it_bundle).first<0 )
+      m_interaction_list.push_back( "neutrino" );
+    else
+      m_interaction_list.push_back( "cosmic" );
   }
   
   return image_v;
   
 }//end of findboundingboxes
+
+void BNBCosmics::processBoundingBoxes( const art::Event& e,
+				       const std::vector<larcaffe::RangeArray_t>& bboxes, 
+				       const larcaffe::RangeArray_t& the_range_v,
+				       const std::vector<int>& plane_compression,
+				       const std::vector<int>& interaction_indices ) {
+  // here we put them into the tree. we save the images if unstructed to do so
+  // we list the position of the bounding boxes within the coordiante system of an event image (the_range_v)
+
+  if ( (int)plane_compression.size()!=(fNPlanes+1) ) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "Compression factors for each plane is missing or incomplete." << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  if ( bboxes.size()!=interaction_indices.size() ) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__)
+      << "Number of bounding boxes does not match the number of interaction indices." << std::endl;
+    throw ::larcaffe::larbys();
+  }
+
+  // clear tree variables
+  clearBoundingBoxes();
+  
+  // get the data
+  art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
+  art::Handle< std::vector<recob::Wire> > wireVecHandle;
+  LoadDataHandles( e, digitVecHandle, wireVecHandle );
+
+  // the image extractor
+  larcaffe::supera::ImageExtractor extractor;
+
+  int ibox = -1;
+  m_nfilledboxes = 0;
+  for ( auto &bbox : bboxes ) {
+    // bbox is an RangeArray_t object
+    ibox++;
+    
+    // stay within the event range's time window
+    if ( bbox[fNPlanes].end<the_range_v[fNPlanes].start 
+	 || bbox[fNPlanes].start>the_range_v[fNPlanes].end )
+      continue;
+
+    // calculate time bounds in event image coordinates
+    int t_lo = (int)bbox[fNPlanes].start  - (int)the_range_v[fNPlanes].start;
+    int t_hi = (int)bbox[fNPlanes].end - (int)the_range_v[fNPlanes].start;
+
+    // enforce time bounds
+    t_lo = std::max( t_lo, 0 );
+    t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].end-(int)the_range_v[fNPlanes].start );
+
+    for (int plane=0; plane<fNPlanes; plane++) {
+      
+      // need to correct bounding box coodindates for event images compression factor
+      // bounding box goes counter clockwise from origin
 	
+      int w_lo = (int)bbox[plane].start  - (int)the_range_v[plane].start;
+      int w_hi = (int)bbox[plane].end - (int)the_range_v[plane].start;
+	
+      // enforce wire range bounds
+      w_lo = std::max( w_lo, 0 );
+      w_hi = std::min( w_hi, (int)the_range_v[plane].end-(int)the_range_v[plane].start);
+      
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
+	<< "[Plane " << plane << " BBOX]"
+	<< " t=[" << (int)the_range_v[fNPlanes].start+t_lo << ", " << (int)the_range_v[fNPlanes].start+t_hi << "]"
+	<< " w=[" << (int)the_range_v[plane].start+w_lo << ", " << (int)the_range_v[plane].start+w_hi << "]"
+	<< " image bound: t=[" << the_range_v[fNPlanes].start << ", " << the_range_v[fNPlanes].end <<"]"
+	<< " w=[" << the_range_v[plane].start << ", " << the_range_v[plane].end << "]" << std::endl;
+
+      m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+      m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
+      
+      m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
+      m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
+      
+      m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+      m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
+      
+      m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
+      m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
+      
+      // save image for bbox, if we are told to do so
+      if ( fCropInteractions ) {
+	larcaffe::Image bbimg;
+	if ( fImageSource=="Wire" )
+	  bbimg = extractor.Extract( plane, bbox[plane], bbox[fNPlanes], *wireVecHandle );
+	else if ( fImageSource=="RawDigits" )
+	  bbimg = extractor.Extract( plane, bbox[plane], bbox[fNPlanes], *digitVecHandle );
+	else
+	  throw ::larcaffe::larbys();
+	
+	// compress image and bounding boxes
+	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
+	  bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kMaxPool );
+	}
+	m_bb_nticks = bbimg.height();
+	m_bb_nwires = bbimg.width();
+	
+	// transfer image to ROOT variables
+	m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
+	for ( int w=0; w<(int)bbimg.width(); w++) {
+	  for (int t=0; t<(int)bbimg.height(); t++) {
+	    m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
+	  }
+	}
+      }//end of if crop
+      
+    }//end of planes loop to fill bounding boxes
+    
+    // save this bbox!
+    m_bbox_label->push_back( m_interaction_list.at(ibox) );
+    //sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
+    m_BBTree->Fill();
+    m_nfilledboxes++;
+  }// end of bounding box loop
+  
+}//end of processBoundingBox
+
 void BNBCosmics::getMCTruth( art::Event const & e ) {
   // Sets the MC truth variables to be stored in m_ImageTree
   
@@ -480,11 +579,11 @@ void BNBCosmics::getMCTruth( art::Event const & e ) {
     m_Enu = 0.0;
     const std::vector<simb::MCTruth>& genie = *gentruth;
     m_Enu = genie.at(0).GetParticle(0).E();
-    m_vertex.resize(4, 0.0 );
-    m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
-    m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
-    m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
-    m_vertex.at(3) = genie.at(0).GetParticle(0).T();
+    // m_vertex.resize(4, 0.0 );
+    // m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
+    // m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
+    // m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
+    // m_vertex.at(3) = genie.at(0).GetParticle(0).T();
 
   }
   else {
@@ -504,36 +603,34 @@ void BNBCosmics::getMCTruth( art::Event const & e ) {
     m_Enu = genie.at(0).GetNeutrino().Nu().E();
 
     // Get Vertex
-    m_vertex.resize(4, 0.0);
-    m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
-    m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
-    m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
-    m_vertex.at(3) = genie.at(0).GetParticle(0).T();
+    // m_vertex.resize(4, 0.0);
+    // m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
+    // m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
+    // m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
+    // m_vertex.at(3) = genie.at(0).GetParticle(0).T();
 
   }
 
   // Get Vertex in terms of time and wire
-  art::ServiceHandle<geo::Geometry> geom;
-  art::ServiceHandle<util::LArProperties> larp;
-  art::ServiceHandle<util::TimeService> ts;
-  //art::ServiceHandle<util::DetectorProperties> detp;
-  const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns                                                                                                                     
+  //art::ServiceHandle<geo::Geometry> geom;
+    
   //const int tick_max = detp->NumberTimeSamples();
-
-  m_vertex_tw.resize(geom->Nplanes()+1,0);
-  for (size_t iplane=0; iplane<geom->Nplanes(); iplane++) {
-    geo::WireID wire_id;
-    try {
-      wire_id = geom->NearestWireID(m_vertex.data(), iplane);
-    }
-    catch (geo::InvalidWireIDError& err) {
-      //std::cout << "out of bounds. using better number" << std::endl;
-      wire_id.Wire = err.better_wire_number;
-    }
-    m_vertex_tw.at(iplane) = wire_id.Wire;
-  }  
-  int tick = (int)(ts->TPCG4Time2Tick(m_vertex.at(3) + (m_vertex.at(0) / drift_velocity))) + 1;
-  m_vertex_tw.at(3) = tick;
+  
+  // vertex stuff
+  // m_vertex_tw.resize(geom->Nplanes()+1,0);
+  // for (size_t iplane=0; iplane<geom->Nplanes(); iplane++) {
+  //   geo::WireID wire_id;
+  //   try {
+  //     wire_id = geom->NearestWireID(m_vertex.data(), iplane);
+  //   }
+  //   catch (geo::InvalidWireIDError& err) {
+  //     //std::cout << "out of bounds. using better number" << std::endl;
+  //     wire_id.Wire = err.better_wire_number;
+  //   }
+  //   m_vertex_tw.at(iplane) = wire_id.Wire;
+  // }  
+  // int tick = (int)(ts->TPCG4Time2Tick(m_vertex.at(3) + (m_vertex.at(0) / drift_velocity))) + 1;
+  // m_vertex_tw.at(3) = tick;
   
 }
   
@@ -547,16 +644,7 @@ void BNBCosmics::analyze(art::Event const & e)
   // Implementation of required member function here.
   if(_logger.debug())
     _logger.LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) << "Load RawDigits Handle" << std::endl;
-  
-  //
-  // Determine region size
-  //
-  if(_logger.info())
-    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracting image array" << std::endl;
-  auto region_v = setEventCrop(e);
-  if(_logger.info())
-    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracted " << region_v.size() << " images!" << std::endl;
-  
+
   // Event Code
   m_event  = (int)e.event();
   m_run    = (int)e.run();
@@ -564,6 +652,7 @@ void BNBCosmics::analyze(art::Event const & e)
   
   // Get MC Truth
   //getMCTruth( e );
+    
   
   // // Label
   // if ( fSingleParticleMode )
@@ -574,242 +663,33 @@ void BNBCosmics::analyze(art::Event const & e)
   //   sprintf(m_label, "nu_%d_%d_%d_mode_%d", m_run, m_subrun, m_event, m_mode );
   
   //
-  // Save region image and bounding boxes
+  // Save event image
   //
-  // art::ServiceHandle<geo::Geometry> geom;
+
+  // Determine the event image region size
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracting image array" << std::endl;
+  auto region_v = setEventCrop(e);
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Extracted " << region_v.size() << " images!" << std::endl;
+
+  // Extract it and save to ROOT file
+  std::vector<int> applied_plane_compression_factors;
+  ExtractImage( e, region_v, applied_plane_compression_factors );
   
+  //
+  // Determine bounding boxes
+  //
   
-  // if(!_producer_v[0].empty()) {
-  //   if(_logger.info())
-  //     _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
+  // get list of boxes
+  std::vector<int> interaction_indices;
+  auto bboxes = findBoundingBoxes(e,interaction_indices);
+  // save them to ROOTFiles
+  processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices );
     
-  //   pWatchLArIO.Start();
-  //   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
-  //   art::Handle< std::vector<recob::Wire> > wireVecHandle;
-  //   if ( fUseWire )
-  //     e.getByLabel(_producer_v[1], wireVecHandle );
-  //   else
-  //     e.getByLabel(_producer_v[0], digitVecHandle);
-  //   _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
-    
-  //   if ( fUseWire ) {
-  //     if ( !wireVecHandle.isValid() ) {// no rawdigits 
-  // 	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
-  // 	  << "Missing Wires by " << _producer_v[1] << " Skipping." << std::endl;
-  // 	return;
-  //     }
-  //     else if ( wireVecHandle->empty() ) // empty rawdigits
-  // 	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty Wire info. skipping." << std::endl;
-  //     else {
-  // 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-  // 	  << "Extracting " << region_v.size() << " images for Wire " << std::endl;
-  //     }
-  //   }
-  //   else {
-  //     if ( !digitVecHandle.isValid() ) { // no rawdigits
-  // 	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) 
-  // 	  << "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
-  // 	return;
-  //     }
-  //     else if ( digitVecHandle->empty() ) // empty rawdigits
-  // 	_logger.LOG(::larcaffe::msg::kWARNING,__FUNCTION__,__LINE__) << "Empty RawDigits info. skipping." << std::endl;
-  //     else {
-  // 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-  // 	  << "Extracting " << region_v.size() << " images for RawDigit " << std::endl;
-  //     }
-  //   }
-    
-    // // clear bounding boxes
-    // clearBoundingBoxes();
-    // // place to store image scale-down, if any
-    // std::vector<int> plane_compression;
-    // plane_compression.resize(fNPlanes+1,1);
-    
-    // // Make an extractor
-    // larcaffe::supera::ImageExtractor extractor;
-    
-    // // loop through cropping regions (should only be one for BNBCosmics Module)
-    // for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
-      
-    //   auto const& range_v = region_v[range_index];
-      
-    //   auto const& time_range = range_v.back();
-      
-    //   for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
-	
-    // 	auto const& wire_range = range_v[plane];
-    // 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__, __LINE__) << "fill wire range " << wire_range.start << " " << wire_range.end << std::endl;
-	
-    // 	if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
-	
-    // 	// copy data into image
-    // 	larcaffe::Image img;
-    // 	if ( fUseWire )
-    // 	  img = extractor.Extract( plane, wire_range, time_range, *wireVecHandle );
-    // 	else
-    // 	  img = extractor.Extract( plane, wire_range, time_range, *digitVecHandle );
-	
-    // 	m_nticks = time_range.end-time_range.start+1;
-    // 	m_wires[plane]  = wire_range.end-wire_range.start+1;
-	
-    // 	//check image
-    // 	// std::cout << "[Check Pre-Compressed Image]" << std::endl;
-    // 	// for (int t=0; t<(int)(time_range.end-time_range.start+1);t++) {
-    // 	//   std::cout << img.pixel( t, 1 ) << " ";
-    // 	// }
-    // 	// std::cout << std::endl;
-	
-    // 	// filter: add the ability to reject images
-    // 	// bool keep = true;
-    // 	// for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
-    // 	//   if( !(*it_filters)->doWeKeep( *db ) ) {
-    // 	//     keep = false;
-    // 	//     break;
-    // 	//   }
-    // 	// }
-    // 	// if ( !keep ) {
-    // 	//   continue;
-    // 	//}
-	
-    // 	// compress image
-    // 	if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
-    // 	  plane_compression[plane] = img.width()/_cropper.TargetWidth();
-    // 	  plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
-    // 	  img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kMaxPool );
-    // 	}
-	
-    // 	// also need to transform vertex_tw into (time,wire) coordinates of this cropped image (filled already in getMC above)
-    // 	m_vertex_tw.at(plane) = (int)(m_vertex_tw.at(plane)-wire_range.start)/plane_compression[plane];
+  // save everything
+  m_ImageTree->Fill();
 
-    // 	// std::cout << "[Check Compressed Image]" << std::endl;
-    // 	// for (int t=0; t<(int)(img.height());t++) {
-    // 	//   std::cout << img.pixel( t, 1 ) << " ";
-    // 	// }
-    // 	// std::cout << std::endl;
-	
-	
-    // 	// transfer image to ROOT variables
-    // 	m_planeImages[plane]->resize( img.height()*img.width() );
-    // 	for ( int w=0; w<(int)img.width(); w++) {
-    // 	  for (int t=0; t<(int)img.height(); t++) {
-    // 	    m_planeImages[plane]->at( img.height()*w + t ) = (int)img.pixel( t, w );
-    // 	  }
-    // 	}
-	
-    // 	// std::cout << "[Check Plane Image]" << std::endl;
-    // 	// for (int t=0; t<(int)(img.height());t++) {
-    // 	//   std::cout << m_planeImages[plane]->at( img.height()*1+t);
-    // 	// }
-    // 	// std::cout << std::endl;	      
-	
-	
-    // 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
-    //   }//end of loop over planes
-      
-    //   // convert time coordinate
-    //   m_vertex_tw.at(fNPlanes) = (int)(m_vertex_tw.at(fNPlanes)-time_range.start)/plane_compression[fNPlanes];
-      
-    // }// end of image crop ranges
-    
-    //
-    // Determine bounding boxes
-    //
-
-  auto bboxes = findBoundingBoxes(e); //<<<<<<<<
-
-
-    // each interaction has bounding boxes in each plane
-  //   auto const& the_range_v = region_v[0];
-    
-  //   int ibox = -1;
-  //   m_nfilledboxes = 0;
-  //   for ( auto const& range : bboxes ) {
-  //     // range is a RangeArray_t which is a vector< pair<int,int> >
-  //     // (x,y) = (wire, time 0toX)
-  //     ibox++;
-      
-  //     // stay within bounds
-  //     if ( range[fNPlanes].end<the_range_v[fNPlanes].start 
-  // 	   || range[fNPlanes].start>the_range_v[fNPlanes].end )
-  // 	continue;
-      
-  //     // calculate time bounds in cropped images coordinates
-  //     int t_lo = (int)range[fNPlanes].start  - (int)the_range_v[fNPlanes].start;
-  //     int t_hi = (int)range[fNPlanes].end - (int)the_range_v[fNPlanes].start;
-      
-  //     // enforce time bounds
-  //     t_lo = std::max( t_lo, 0 );
-  //     t_hi = std::min( t_hi, (int)the_range_v[fNPlanes].end-(int)the_range_v[fNPlanes].start );
-      
-  //     for (int plane=0; plane<fNPlanes; plane++) {
-
-  // 	// need to account for compression
-  // 	// bounding box goes counter clockwise from origin
-	
-  // 	int w_lo = (int)range[plane].start  - (int)the_range_v[plane].start;
-  // 	int w_hi = (int)range[plane].end - (int)the_range_v[plane].start;
-	
-  // 	// enforce image bounds
-  // 	w_lo = std::max( w_lo, 0 );
-  // 	w_hi = std::min( w_hi, (int)the_range_v[plane].end-(int)the_range_v[plane].start);
-	
-  // 	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
-  // 	  << "[Plane " << plane << " BBOX]"
-  // 	  << " t=[" << (int)the_range_v[fNPlanes].start+t_lo << ", " << (int)the_range_v[fNPlanes].start+t_hi << "]"
-  // 	  << " w=[" << (int)the_range_v[plane].start+w_lo << ", " << (int)the_range_v[plane].start+w_hi << "]"
-  // 	  << " image bound: t=[" << the_range_v[fNPlanes].start << ", " << the_range_v[fNPlanes].end <<"]"
-  // 	  << " w=[" << the_range_v[plane].start << ", " << the_range_v[plane].end << "]" << std::endl;
-
-  // 	m_plane_bb_loleft_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
-  // 	m_plane_bb_loleft_w[plane]->push_back( w_lo/plane_compression[plane] );
-
-  // 	m_plane_bb_loright_t[plane]->push_back( t_lo/plane_compression[fNPlanes] );
-  // 	m_plane_bb_loright_w[plane]->push_back( w_hi/plane_compression[plane] );
-
-  // 	m_plane_bb_hiright_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
-  // 	m_plane_bb_hiright_w[plane]->push_back( w_hi/plane_compression[plane] );
-
-  // 	m_plane_bb_hileft_t[plane]->push_back( t_hi/plane_compression[fNPlanes] );
-  // 	m_plane_bb_hileft_w[plane]->push_back( w_lo/plane_compression[plane] );
-
-  // 	// save image for bbox
-  // 	larcaffe::Image bbimg;
-  // 	if ( fUseWire )
-  // 	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *wireVecHandle );
-  // 	else
-  // 	  bbimg = extractor.Extract( plane, range[plane], range[fNPlanes], *digitVecHandle );
-	
-  // 	// compress image and bounding boxes
-  // 	if ( _cropper_interaction.TargetWidth() < bbimg.width() || _cropper_interaction.TargetHeight() < bbimg.height() ) {
-  // 	  bbimg.compress( _cropper_interaction.TargetHeight(), _cropper_interaction.TargetWidth(), larcaffe::Image::kMaxPool );
-  // 	}
-  // 	m_bb_nticks = bbimg.height();
-  // 	m_bb_nwires = bbimg.width();
-
-  // 	// transfer image to ROOT variables
-  // 	m_bb_planeImages[plane]->resize( bbimg.height()*bbimg.width() );
-  // 	for ( int w=0; w<(int)bbimg.width(); w++) {
-  // 	  for (int t=0; t<(int)bbimg.height(); t++) {
-  // 	    m_bb_planeImages[plane]->at( bbimg.height()*w + t ) = (int)bbimg.pixel( t, w );
-  // 	  }
-  // 	}
-
-  //     }//end of planes loop to fill bounding boxes
-      
-  //     // save this bbox!
-  //     m_bbox_label->push_back( m_interaction_list.at(ibox) );
-  //     sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
-  //     m_BBTree->Fill();
-  //     m_nfilledboxes++;
-      
-  //   }//end of loop over sets of bounding boxes for a given interaction
-    
-  //   // Finally fill the tree for this event
-  //   m_ImageTree->Fill();
-
-  // }// if RawDigits producer has been specified
-    
-  _time_prof_v[kANALYZE_TOTAL] += pWatchAnalyze.RealTime();
   _event_counter += 1;
 }
 
@@ -856,7 +736,7 @@ void BNBCosmics::endJob() {
   } 
 }
 
-void BNBCosmics::setupTrees(int nplanes) {
+void BNBCosmics::setupTrees() {
 
   // define trees
 
@@ -864,6 +744,8 @@ void BNBCosmics::setupTrees(int nplanes) {
   m_ImageTree = ana_file->make<TTree>( "imgtree", "Tree Containing Image and its MC Truth Info" );  // image of the entire event
   m_BBTree    = ana_file->make<TTree>( "bbtree", "Bounding Box Tree and its label" ); // images of each interaction within events
   
+  // allocate arrays
+  // ---------------
   // allocate image vectors for planes
   m_planeImages = new std::vector<int>*[fNPlanes];
   for (int p=0; p<fNPlanes; p++) {
@@ -873,22 +755,24 @@ void BNBCosmics::setupTrees(int nplanes) {
   for (int p=0; p<fNPlanes; p++) {
     m_bb_planeImages[p] = new std::vector<int>;
   }
+  // allocate image for PMT
+  m_pmtImage = new std::vector<int>;
 
-  // ImageTree
-  // ---------
-    // add the plane images
-  for (int i=0; i<nplanes; i++) {
-    char branchname[20];
-    sprintf( branchname, "img_plane%d", i );
-    m_ImageTree->Branch( branchname, &(*m_planeImages[i]) );
-    m_BBTree->Branch( branchname, &(*m_bb_planeImages[i]) );
+  // allocate vertex vector for each plane
+  m_plane_bb_3D_vertex = new std::vector<float>;
+  m_plane_bb_vertexpixel_tw = new std::vector<int>*[fNPlanes];
+  for (int p=0; p<fNPlanes; p++) {
+    m_plane_bb_vertexpixel_tw[p] = new std::vector<int>;
   }
+
+  // Define ImageTree Branches
+  // --------------------------
+  // indexes
   m_ImageTree->Branch( "run", &m_run, "run/I" );
   m_ImageTree->Branch( "subrun", &m_subrun, "subrun/I" );
   m_ImageTree->Branch( "event", &m_event, "event/I" );
+  // truths
   m_ImageTree->Branch( "Enu", &m_Enu, "Enu/F" );
-  m_ImageTree->Branch( "vertex", &m_vertex );
-  m_ImageTree->Branch( "vertex_tw", &m_vertex_tw );
   m_ImageTree->Branch( "mode", &m_mode, "mode/I" );
   m_ImageTree->Branch( "nuscatter", &m_nuscatter, "nuscatter/I" );
   m_ImageTree->Branch( "interaction", &m_interaction, "interaction/I" );
@@ -899,32 +783,59 @@ void BNBCosmics::setupTrees(int nplanes) {
   m_wires = new int[fNPlanes];
   m_ImageTree->Branch( "nwires", m_wires, chr_mwires );
   m_ImageTree->Branch( "label", m_label, "label[50]/C" );
+  // bounding box info
+  m_ImageTree->Branch( "nbboxes", &m_nfilledboxes, "nbboxes/I" );
+  m_bbox_label = new std::vector<std::string>;
+  m_ImageTree->Branch( "bblabels", m_bbox_label );
+  
+  // image branches
+  for (int i=0; i<fNPlanes; i++) {
+    char branchname[20];
+    sprintf( branchname, "img_plane%d", i );
+    m_ImageTree->Branch( branchname, &(*m_planeImages[i]) );
+  }
+  // vertex
+  m_ImageTree->Branch( "bb_vertex", &(*m_plane_bb_3D_vertex) );
+  // vertex for each bb in terms of pixel position
+  for (int i=0; i<fNPlanes; i++) {
+    char branchname[20];
+    sprintf( branchname, "bb_plane%d_vertex_tw", i );
+    m_ImageTree->Branch( branchname, &(*m_plane_bb_vertexpixel_tw[i]) );
+  }
+  // bounding box info setup below
+  
 
-  // Bounding Box Tree
+  // Define Bounding Box Tree Branches
+  // -----------------------------------
+  // indexes
   m_BBTree->Branch( "run", &m_run, "run/I" );
   m_BBTree->Branch( "subrun", &m_subrun, "subrun/I" );
   m_BBTree->Branch( "event", &m_event, "event/I" );
   m_BBTree->Branch( "nboxes", &m_nfilledboxes, "nboxes/I" );
   m_BBTree->Branch( "label", m_bblabel, "label[100]/C" );
   m_BBTree->Branch( "Enu", &m_Enu, "Enu/F" );
-  m_BBTree->Branch( "vertex", &m_vertex );
-  m_BBTree->Branch( "vertex_tw", &m_vertex_tw );
+  for (int i=0; i<fNPlanes; i++) {
+    char branchname[20];
+    sprintf( branchname, "img_plane%d", i );
+    m_BBTree->Branch( branchname, &(*m_bb_planeImages[i]) );
+  }
 
   // Bounding Box Branches: one for each plane
+  // We attach them to both ImageTree and BBTree
   // ugh, these branches are such bad code...
-  m_plane_bb_loleft_t = new std::vector<int>*[nplanes];
-  m_plane_bb_loleft_w = new std::vector<int>*[nplanes];
-  m_plane_bb_loright_t = new std::vector<int>*[nplanes];
-  m_plane_bb_loright_w = new std::vector<int>*[nplanes];
-  m_plane_bb_hiright_t = new std::vector<int>*[nplanes];
-  m_plane_bb_hiright_w = new std::vector<int>*[nplanes];
-  m_plane_bb_hileft_t = new std::vector<int>*[nplanes];
-  m_plane_bb_hileft_w = new std::vector<int>*[nplanes];
-  m_plane_bbinteraction_loleft_t = new int[nplanes];
-  m_plane_bbinteraction_loleft_w = new int[nplanes];
-  m_plane_bbinteraction_hiright_t = new int[nplanes];
-  m_plane_bbinteraction_hiright_w = new int[nplanes];
-  for (int plane=0; plane<nplanes; plane++) {
+  m_plane_bb_loleft_t = new std::vector<int>*[fNPlanes];
+  m_plane_bb_loleft_w = new std::vector<int>*[fNPlanes];
+  m_plane_bb_loright_t = new std::vector<int>*[fNPlanes];
+  m_plane_bb_loright_w = new std::vector<int>*[fNPlanes];
+  m_plane_bb_hiright_t = new std::vector<int>*[fNPlanes];
+  m_plane_bb_hiright_w = new std::vector<int>*[fNPlanes];
+  m_plane_bb_hileft_t = new std::vector<int>*[fNPlanes];
+  m_plane_bb_hileft_w = new std::vector<int>*[fNPlanes];
+  m_plane_bbinteraction_loleft_t = new int[fNPlanes];
+  m_plane_bbinteraction_loleft_w = new int[fNPlanes];
+  m_plane_bbinteraction_hiright_t = new int[fNPlanes];
+  m_plane_bbinteraction_hiright_w = new int[fNPlanes];
+  for (int plane=0; plane<fNPlanes; plane++) {
     m_plane_bb_loleft_t[plane] = new std::vector<int>;
     m_plane_bb_loleft_w[plane] = new std::vector<int>;
     m_plane_bb_hileft_t[plane] = new std::vector<int>;
@@ -961,15 +872,14 @@ void BNBCosmics::setupTrees(int nplanes) {
     sprintf( branchname, "HiLeft_w_plane%d", plane );
     m_ImageTree->Branch( branchname, &(*m_plane_bb_hileft_w[plane]) );
   }
-  
-  m_bbox_label = new std::vector<std::string>;
-  m_ImageTree->Branch( "bblabels", m_bbox_label );
 }
 
 void BNBCosmics::clearBoundingBoxes() {
   
   m_bbox_label->clear();
+  m_plane_bb_3D_vertex->clear();
   for (int plane=0; plane<fNPlanes; plane++) {
+    // bounding box points
     m_plane_bb_loleft_t[plane]->clear();
     m_plane_bb_loleft_w[plane]->clear();
     m_plane_bb_loright_t[plane]->clear();
@@ -978,8 +888,176 @@ void BNBCosmics::clearBoundingBoxes() {
     m_plane_bb_hiright_w[plane]->clear();
     m_plane_bb_hileft_t[plane]->clear();
     m_plane_bb_hileft_w[plane]->clear();
+    m_plane_bb_vertexpixel_tw[plane]->clear();
   }
+}
   
+void BNBCosmics::ExtractImage( const art::Event& e, const std::vector<larcaffe::RangeArray_t>& region_v, std::vector<int>& plane_compression ) {
+  // puts the wire ADC data into ImageTree
+  // returns the compression factors that was used to fit the data into the target image size
+  //  we'll need those factors for the bounding box routines
+  
+  art::ServiceHandle<geo::Geometry> geom;
+  art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
+  art::Handle< std::vector<recob::Wire> > wireVecHandle;
+  // hit art handle would go here
+  LoadDataHandles( e, digitVecHandle, wireVecHandle );
+  
+  // Now that data products ready, extract event image
+  plane_compression.resize(fNPlanes+1,1);
+  
+  // Make an extractor
+  larcaffe::supera::ImageExtractor extractor;
+  _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__, __LINE__) << "[Cropping out Event Image]" << std::endl;
+  
+  // loop through cropping regions (should only be one for BNBCosmics Module)
+  for(size_t range_index=0; range_index < region_v.size(); ++range_index) {
+    
+    auto const& range_v = region_v[range_index];
+    
+    if ( !larcaffe::RangesOK( range_v ) ) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Event Image Region was invalid!" << std::endl;
+      larcaffe::PrintRangeArray( range_v );
+      throw ::larcaffe::larbys();
+    }
+    
+    auto const& time_range = range_v.back();
+    
+    for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+      
+      auto const& wire_range = range_v[plane];
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__, __LINE__) << "fill wire range " << wire_range.start << " " << wire_range.end << std::endl;
+      
+      if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
+      
+      // copy data into image
+      larcaffe::Image img;
+      if ( fImageSource=="Wire" )
+	img = extractor.Extract( plane, wire_range, time_range, *wireVecHandle );
+      else if ( fImageSource=="RawDigits" )
+	img = extractor.Extract( plane, wire_range, time_range, *digitVecHandle );
+      else
+	throw ::larcaffe::larbys();
+      
+      m_nticks = time_range.size();
+      m_wires[plane]  = wire_range.size();
+      
+      //check image
+      // std::cout << "[Check Pre-Compressed Image]" << std::endl;
+      // for (int t=0; t<(int)(time_range.end-time_range.start+1);t++) {
+      //   std::cout << img.pixel( t, 1 ) << " ";
+      // }
+      // std::cout << std::endl;
+      
+      // filter: add the ability to reject images
+      // bool keep = true;
+      // for ( std::vector< larcaffe::supera::FilterBase* >::iterator it_filters=_filter_list.begin(); it_filters!=_filter_list.end(); it_filters++ ) {
+      //   if( !(*it_filters)->doWeKeep( *db ) ) {
+      //     keep = false;
+      //     break;
+      //   }
+      // }
+      // if ( !keep ) {
+      //   continue;
+      //}
+      
+      // compress image
+      if ( _cropper.TargetWidth() < img.width() || _cropper.TargetHeight() < img.height() ) {
+	plane_compression[plane] = img.width()/_cropper.TargetWidth();
+	plane_compression[fNPlanes] = img.height()/_cropper.TargetHeight();
+	img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kMaxPool );
+      }
+      
+      // also need to transform vertex_tw into (time,wire) coordinates of this cropped image (filled already in getMC above)
+      //m_vertex_tw.at(plane) = (int)(m_vertex_tw.at(plane)-wire_range.start)/plane_compression[plane];
+      
+      // std::cout << "[Check Compressed Image]" << std::endl;
+      // for (int t=0; t<(int)(img.height());t++) {
+      //   std::cout << img.pixel( t, 1 ) << " ";
+      // }
+      // std::cout << std::endl;
+      
+      
+      // transfer image to ROOT variables
+      m_planeImages[plane]->resize( img.height()*img.width() );
+      for ( int w=0; w<(int)img.width(); w++) {
+	for (int t=0; t<(int)img.height(); t++) {
+	  m_planeImages[plane]->at( img.height()*w + t ) = (int)img.pixel( t, w );
+	}
+      }
+      
+      // std::cout << "[Check Plane Image]" << std::endl;
+      // for (int t=0; t<(int)(img.height());t++) {
+      //   std::cout << m_planeImages[plane]->at( img.height()*1+t);
+      // }
+      // std::cout << std::endl;	      
+      
+      
+    	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
+    }//end of loop over planes
+    
+    // convert time coordinate
+    //m_vertex_tw.at(fNPlanes) = (int)(m_vertex_tw.at(fNPlanes)-time_range.start)/plane_compression[fNPlanes];
+    
+  }// end of image crop ranges
+}//end of ExtractImage
+  
+void BNBCosmics::LoadDataHandles( const art::Event& e,
+				  art::Handle< std::vector<raw::RawDigit> >& digitVecHandle,
+				  art::Handle< std::vector<recob::Wire> >& wireVecHandle ) {
+
+  TStopwatch pWatchLArIO;
+  
+  // because LArSoft supposedly caches, we don't have to worry about repeatedly calling this
+  if(_logger.info())
+    _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Event Image" << std::endl;
+  
+  // LOAD THE ADC VALUES
+  if ( fImageSource=="RawDigits" ) {
+    if(_producer_v[0].empty() || _producer_v[0]=="") {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Producer not set for Rawdigits" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving RawDigit... " << std::endl;
+    
+    pWatchLArIO.Start();
+    e.getByLabel(_producer_v[0], digitVecHandle); 
+    _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
+    
+    if ( !digitVecHandle.isValid() ) { // no rawdigits
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) 
+	<< "Missing RawDigits by " << _producer_v[0] << " Skipping." << std::endl;
+      throw ::larcaffe::larbys();
+      return;
+    }
+  }
+  else if ( fImageSource=="Wire" ) {
+    if(_producer_v[1].empty() || _producer_v[1]=="") {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Producer not set for Wire data" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    
+    if(_logger.info())
+      _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) << "Saving Wire ADC values... " << std::endl;
+    
+    pWatchLArIO.Start();
+    e.getByLabel(_producer_v[1], wireVecHandle); 
+    _time_prof_v[kIO_LARSOFT] += pWatchLArIO.RealTime();
+    
+    if ( !wireVecHandle.isValid() ) { // no rawdigits
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) 
+	<< "Missing Wire by " << _producer_v[1] << " Skipping." << std::endl;
+      throw ::larcaffe::larbys();
+      return;
+    }
+  }//end of if producer==wire
+  else if ( fImageSource=="Hit" ) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Not implemented yet." << std::endl;
+    throw ::larcaffe::larbys();
+    return;
+  }
 }
 
 DEFINE_ART_MODULE(BNBCosmics)

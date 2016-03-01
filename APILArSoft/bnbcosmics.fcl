@@ -18,7 +18,7 @@ bnbcosmics: {
     # A hard-cut limit for outer edge of an image. A range is specified by [min,max] pair for each plane and time.
     # The last element is for the time and other elements respect plane ID. Length should be # planes + 1 for 
     # used geometry.
-    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[3175,7654]]
+    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[2400,7007]]
     # Cropping configurations
     EventCropperConfig: { 
         TimePadding:10      # Padding for time
@@ -31,8 +31,8 @@ bnbcosmics: {
     InteractionCropperConfig: { 
         TimePadding:10      # Padding for time
         WirePadding:10      # Padding for wire
-        TimeTargetSize:384  # Target image width size (wire)
-        WireTargetSize:384  # Target image height size (time)
+        TimeTargetSize:192  # Target image width size (wire)
+        WireTargetSize:192  # Target image height size (time)
         CompressionFactor:0 # Compression factor (see note below)
         }
     # Note: the cropper first finds the ROI in wire plane by using either SimChannel or MCTrack(+MCShower in future)

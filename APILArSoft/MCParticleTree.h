@@ -8,6 +8,7 @@
 #include <string>
 #include "MCBase/MCTrack.h"
 #include "MCBase/MCShower.h"
+#include "SimulationBase/MCTruth.h"
 
 namespace larbys {
   namespace supera {
@@ -86,12 +87,15 @@ namespace larbys {
       };
       virtual ~MCParticleTree() {};
       
-      void addNeutrino( const std::vector<simb::MCParticle>& initial_mcparticle );
+      void addNeutrinoInteraction( const simb::MCTruth& neutrino_interaction );
       void parse(); //< parse list of tracks and showers
       void boom();  //< dump the batches
+      void matchTrackToNeutrino( const sim::MCTrack& track );
+      void matchShowerToNeutrino( const sim::MCShower& shower );
       
       int num_neutrinos;
       std::map< int, std::vector<MCPTInfo> > m_bundles;
+      std::map< int, int > m_neutrino_interaction_particles; // number of interaction particles during initial fill (not counting attached daughters)
       const std::vector<sim::MCTrack>* trackmap;
       const std::vector<sim::MCShower>* showermap;
       
