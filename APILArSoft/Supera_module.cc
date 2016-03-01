@@ -256,7 +256,7 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
       
       auto const& wire_range = range_array[plane];
       
-      if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
+      if(wire_range.start < wire_range.end && time_range.start < time_range.end) {
 	
 	image_v.push_back(range_array);
 	
@@ -299,7 +299,7 @@ std::vector<larcaffe::RangeArray_t> Supera::ImageArray(const art::Event& e)
 
 	auto const& wire_range = range_array[plane];
 
-	if(wire_range.first < wire_range.second && time_range.first < time_range.second) {
+	if(wire_range.start < wire_range.end && time_range.start < time_range.end) {
 
 	  image_v.push_back(range_array);
 
@@ -386,18 +386,18 @@ void Supera::analyze(art::Event const & e)
 
 	  auto const& wire_range = range_v[plane];
 
-	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+	  if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 
-	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
-	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+	  _lar_api.SetRange( wire_range.start, wire_range.end, plane,
+			     (wire_range.end - wire_range.end) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.start, time_range.end, geom->Nplanes(),
+			     (time_range.end - time_range.end) / _cropper.TargetHeight() );
 	  
 	  pWatchDatum.Start();
-	  db->set_image_size(time_range.second - time_range.first + 1,
-			     wire_range.second - wire_range.first + 1);
+	  db->set_image_size(time_range.end - time_range.start + 1,
+			     wire_range.end - wire_range.start + 1);
 	  _lar_api.Copy(*digitVecHandle,*db);
 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
@@ -453,18 +453,18 @@ void Supera::analyze(art::Event const & e)
 
 	  auto const& wire_range = range_v[plane];
 
-	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+	  if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 
-	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
-	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+	  _lar_api.SetRange( wire_range.start, wire_range.end, plane,
+			     (wire_range.end - wire_range.end) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.start, time_range.end, geom->Nplanes(),
+			     (time_range.end - time_range.end) / _cropper.TargetHeight() );
 
 	  pWatchDatum.Start();
-	  db->set_image_size(time_range.second - time_range.first + 1,
-			     wire_range.second - wire_range.first + 1);
+	  db->set_image_size(time_range.end - time_range.start + 1,
+			     wire_range.end - wire_range.start + 1);
 	  _lar_api.Copy(*wireVecHandle,*db);
 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 
@@ -508,18 +508,18 @@ void Supera::analyze(art::Event const & e)
 
 	  auto const& wire_range = range_v[plane];
 
-	  if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+	  if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
 
 	  for(size_t i=0; i<= geom->Nplanes(); ++i) _lar_api.SetRange(0,0,i);
 
-	  _lar_api.SetRange( wire_range.first, wire_range.second, plane,
-			     (wire_range.second - wire_range.second) / _cropper.TargetWidth() );
-	  _lar_api.SetRange( time_range.first, time_range.second, geom->Nplanes(),
-			     (time_range.second - time_range.second) / _cropper.TargetHeight() );
+	  _lar_api.SetRange( wire_range.start, wire_range.end, plane,
+			     (wire_range.end - wire_range.end) / _cropper.TargetWidth() );
+	  _lar_api.SetRange( time_range.start, time_range.end, geom->Nplanes(),
+			     (time_range.end - time_range.end) / _cropper.TargetHeight() );
 
 	  pWatchDatum.Start();
-	  db->set_image_size(time_range.second - time_range.first + 1,
-			     wire_range.second - wire_range.first + 1);
+	  db->set_image_size(time_range.end - time_range.start + 1,
+			     wire_range.end - wire_range.start + 1);
 	  _lar_api.Copy(*hitVecHandle,*db);
 	  _time_prof_v[kIO_DATUM] += pWatchDatum.RealTime();
 

@@ -7,14 +7,11 @@
 #include "SuperaCore/converter_base.h"
 #include <utility>
 #include "LArCaffe/Image.h"
+#include "LArCaffe/LArCaffeTypes.h"
 
 namespace larcaffe {
 
   namespace supera {
-
-    typedef std::pair<unsigned int, unsigned int> Range_t;
-
-    typedef std::vector<Range_t> RangeArray_t;
 
     class ConverterAPI : public larcaffe_base {
 

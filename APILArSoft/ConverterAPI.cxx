@@ -21,11 +21,11 @@ namespace larcaffe {
       if(_range_v.empty()) {
 	_range_v.resize(geom->Nplanes()+1,Range_t(0,0));
 	for(size_t plane=0; plane<geom->Nplanes(); ++plane) {
-	  _range_v[plane].first  = 0;
-	  _range_v[plane].second = geom->Nwires(plane) - 1;
+	  _range_v[plane].start  = 0;
+	  _range_v[plane].end = geom->Nwires(plane) - 1;
 	}
-	_range_v[geom->Nplanes()].first=0;
-	_range_v[geom->Nplanes()].second=detp->NumberTimeSamples() - 1;
+	_range_v[geom->Nplanes()].start=0;
+	_range_v[geom->Nplanes()].end=detp->NumberTimeSamples() - 1;
 	_compression_factor_v.resize(geom->Nplanes(),1);
       }
 
@@ -46,8 +46,8 @@ namespace larcaffe {
 	logger().LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__) 
 	  << "set range " << min << " => " << max << " @ plane " << plane_id << std::endl;
       
-      _range_v[plane_id].first  = min;
-      _range_v[plane_id].second = max;
+      _range_v[plane_id].start  = min;
+      _range_v[plane_id].end = max;
 
       if(plane_id < geom->Nplanes() && compression_factor)
 
@@ -59,8 +59,8 @@ namespace larcaffe {
 
       auto& wire_range = _range_v[wid.Plane];
 
-      return ( wire_range.first  <= wid.Wire && 
-	       wire_range.second >= wid.Wire );
+      return ( wire_range.start  <= wid.Wire && 
+	       wire_range.end >= wid.Wire );
     }
 
     bool ConverterAPI::InRange(const ::geo::WireID& wid, const unsigned int time) const {
@@ -69,8 +69,8 @@ namespace larcaffe {
 
       auto& time_range = _range_v.back();
 
-      return ( time_range.first  <= time &&
-	       time_range.second >= time );
+      return ( time_range.start  <= time &&
+	       time_range.end >= time );
     }
 
     void ConverterAPI::Copy(const std::vector<raw::RawDigit>& digit_v, 
@@ -92,7 +92,7 @@ namespace larcaffe {
 
 	auto& img = _img_v[plane];
 
-	img.resize( (time_range.second - time_range.first + 1), (wire_range.second - wire_range.first + 1) );
+	img.resize( (time_range.end - time_range.start + 1), (wire_range.end - wire_range.start + 1) );
 
 	img.clear_data();
       }
@@ -109,28 +109,28 @@ namespace larcaffe {
 
 	if(!InRange(wire_id)) continue;
 
-	if(wire_range.first == wire_range.second) continue;
+	if(wire_range.start == wire_range.end) continue;
 
-	if(wire_range.first == wire_range.second && time_range.first == time_range.second) continue;
+	if(wire_range.start == wire_range.end && time_range.start == time_range.end) continue;
 
 	if(logger().debug())
 	  logger().LOG(::larcaffe::msg::kDEBUG,__FUNCTION__,__LINE__)
 	    << "Filling for wire " << wire_id.Wire 
 	    << " length " << wf.ADCs().size()
-	    << " index " << time_range.first << " => " << time_range.second << std::endl;
+	    << " index " << time_range.start << " => " << time_range.end << std::endl;
 
-	if(wf.NADC() <= time_range.second) {
+	if(wf.NADC() <= time_range.end) {
 
 	  logger().LOG(::larcaffe::msg::kERROR,__FUNCTION__,__LINE__)
 	    << "Found an waveform length " << wf.NADC() 
-	    << " which is shorter than set limit max " << time_range.second 
+	    << " which is shorter than set limit max " << time_range.end 
 	    << std::endl;
 	  
 	  /*
-	  conv.copy_data( (unsigned int)(wire_id.Wire) - wire_range.first,
+	  conv.copy_data( (unsigned int)(wire_id.Wire) - wire_range.start,
 			  (std::vector<short>)(wf.ADCs()),
-			  time_range.first,
-			  wf.NADC() - time_range.first,
+			  time_range.start,
+			  wf.NADC() - time_range.start,
 			  0, 0 );
 	  */
 
@@ -144,13 +144,13 @@ namespace larcaffe {
 
 	  if(logger().debug()) 
 	    logger().LOG(msg::kDEBUG,__FUNCTION__,__LINE__)
-	      << "Saving into image @ " << wire_id.Wire - wire_range.first << " column size " << time_range.second - time_range.first + 1
+	      << "Saving into image @ " << wire_id.Wire - wire_range.start << " column size " << time_range.end - time_range.start + 1
 	      << " into datum " << conv.data().height() << " : " << conv.data().width() << std::endl;
 
-	  conv.copy_data( (unsigned int)(wire_id.Wire - wire_range.first),
+	  conv.copy_data( (unsigned int)(wire_id.Wire - wire_range.start),
 			  (std::vector<short>)(wf.ADCs()),
-			  time_range.first,
-			  time_range.second - time_range.first + 1,
+			  time_range.start,
+			  time_range.end - time_range.start + 1,
 			  0, 0 );
 	}else {
 	  
@@ -158,14 +158,14 @@ namespace larcaffe {
 
 	  /*
 	  img.copy(0,
-		   wire_id.Wire - wire_range.first,
-		   &(wf.ADCs()[time_range.first]),
-		   time_range.second - time_range.first);
+		   wire_id.Wire - wire_range.start,
+		   &(wf.ADCs()[time_range.start]),
+		   time_range.end - time_range.start);
 	  */
 	  img.copy(0,
-		   wire_id.Wire - wire_range.first,
-		   (short*)(&(wf.ADCs()[time_range.first])),
-		   time_range.second - time_range.first);
+		   wire_id.Wire - wire_range.start,
+		   (short*)(&(wf.ADCs()[time_range.start])),
+		   time_range.end - time_range.start);
 	  
 	}
       }
@@ -179,7 +179,7 @@ namespace larcaffe {
 	auto const& time_comp = _compression_factor_v.back();
 
 	auto const& wire_range = _range_v[plane];
-	if(wire_range.first==wire_range.second) continue;
+	if(wire_range.start==wire_range.end) continue;
 
 	if(wire_comp || time_comp)
 

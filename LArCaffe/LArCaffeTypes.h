@@ -8,8 +8,32 @@
 #include <climits>
 namespace larcaffe {
 
-  typedef ::std::pair<unsigned int, unsigned int> Range_t;
+  //typedef ::std::pair<unsigned int, unsigned int> Range_t;
+  class Range_t {
+  public:
+    Range_t( unsigned int start_, unsigned int end_ ) {
+      start = start_;
+      end = end_;
+      filled = false;
+    }
+    Range_t() {
+      start = 0;
+      end = 0;
+      filled = false;
+    }
+    virtual ~Range_t() {};
 
+    bool isFilled() const { return filled; };
+    void setFilled() { filled = true; };
+    unsigned int size() { return std::abs((int)end-(int)start)+1; };
+
+    unsigned int start;
+    unsigned int end;
+    bool filled = false;
+    
+  };
+
+  //typedef ::std::vector<Range_t> RangeArray_t;
   typedef ::std::vector<Range_t> RangeArray_t;
 
   const unsigned int kINVALID_UINT = std::numeric_limits<unsigned int>::max();

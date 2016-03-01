@@ -5,16 +5,16 @@
 namespace larcaffe {
 
   bool RangeEmpty(const larcaffe::Range_t& r)
-  { return (r.first < r.second); }
+  { return r.isFilled(); }
 
   bool RangeValidity(const larcaffe::Range_t& r)
-  { return (r.first <= r.second); }
+  { return (r.start <= r.end); }
 
   bool RangeExclusive(const larcaffe::Range_t& lhs, const larcaffe::Range_t& rhs)
-  { return (lhs.second < rhs.first || rhs.second < lhs.first); }
+  { return (lhs.end < rhs.start || rhs.end < lhs.start); }
 
   bool RangeInclusive(const larcaffe::Range_t& lhs, const larcaffe::Range_t& rhs)
-  { return (lhs.first < rhs.first && rhs.second < lhs.second); }
+  { return (lhs.start < rhs.start && rhs.end < lhs.end); }
 
   larcaffe::Range_t AND(const larcaffe::Range_t& lhs, const larcaffe::Range_t& rhs)
   {
@@ -27,8 +27,8 @@ namespace larcaffe {
     if(RangeInclusive(lhs,rhs)) res = lhs;
     else if(RangeInclusive(rhs,lhs)) res = rhs;
     else {
-      res.first = std::min(lhs.first,rhs.first);
-      res.second = std::max(lhs.second,rhs.second);
+      res.start = std::min(lhs.start,rhs.start);
+      res.end = std::max(lhs.end,rhs.end);
     }
     return res;
   }
@@ -38,8 +38,8 @@ namespace larcaffe {
     if(!RangeValidity(lhs) || !RangeValidity(rhs)) throw larbys("<larcaffe::AND> Invalid range provided!");
 
     larcaffe::Range_t res(0,0);
-    res.first = std::min(lhs.first,rhs.first);
-    res.second = std::max(lhs.second,rhs.second);
+    res.start = std::min(lhs.start,rhs.start);
+    res.end = std::max(lhs.end,rhs.end);
     return res;
   }
 

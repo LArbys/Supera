@@ -52,7 +52,7 @@ namespace larcaffe {
 
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
-      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+      for(auto& r : result) { r.start = larcaffe::kINVALID_UINT; r.end = 0; }
 
       for(auto const& mct : mct_v) {
 	
@@ -63,7 +63,7 @@ namespace larcaffe {
 	// if all are [0,0], useless
 	bool allzero = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=0 || boundary[plane].end!=0 ) {
 	    allzero = false;
 	    break;
 	  }
@@ -71,7 +71,7 @@ namespace larcaffe {
 	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=larcaffe::kINVALID_UINT || boundary[plane].end!=0 ) {
 	    isempty = false;
 	    break;
 	  }
@@ -84,8 +84,8 @@ namespace larcaffe {
 	  
 	  auto& all = result[i];
 	  auto& one = boundary[i];
-	  if(all.first  > one.first ) all.first  = one.first;
-	  if(all.second < one.second) all.second = one.second;
+	  if(all.start  > one.start ) all.start  = one.start;
+	  if(all.end < one.end) all.end = one.end;
 	  
 	}
       }
@@ -96,7 +96,7 @@ namespace larcaffe {
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "MCTrack Collection ... Plane " << plane 
-	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
       }
       
       return result;
@@ -108,7 +108,7 @@ namespace larcaffe {
 
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
-      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+      for(auto& r : result) { r.start = larcaffe::kINVALID_UINT; r.end = 0; }
     
       // MCTRACKS
       for(auto const& mct : mct_v) {
@@ -120,7 +120,7 @@ namespace larcaffe {
 	// if all are [0,0], useless
 	bool allzero = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=0 || boundary[plane].end!=0 ) {
 	    allzero = false;
 	    break;
 	  }
@@ -128,7 +128,7 @@ namespace larcaffe {
 	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=larcaffe::kINVALID_UINT || boundary[plane].end!=0 ) {
 	    isempty = false;
 	    break;
 	  }
@@ -141,8 +141,8 @@ namespace larcaffe {
 	  
 	  auto& all = result[i];
 	  auto& one = boundary[i];
-	  if(all.first  > one.first ) all.first  = one.first;
-	  if(all.second < one.second) all.second = one.second;
+	  if(all.start  > one.start ) all.start  = one.start;
+	  if(all.end < one.end) all.end = one.end;
 	  
 	}
       }
@@ -157,7 +157,7 @@ namespace larcaffe {
 	// if all are [0,0], useless
 	bool allzero = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=0 || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=0 || boundary[plane].end!=0 ) {
 	    allzero = false;
 	    break;
 	  }
@@ -165,7 +165,7 @@ namespace larcaffe {
 	// check if never updated
 	bool isempty = true;
 	for ( size_t plane=0; plane<boundary.size(); plane++ ) {
-	  if ( boundary[plane].first!=larcaffe::kINVALID_UINT || boundary[plane].second!=0 ) {
+	  if ( boundary[plane].start!=larcaffe::kINVALID_UINT || boundary[plane].end!=0 ) {
 	    isempty = false;
 	    break;
 	  }
@@ -178,8 +178,8 @@ namespace larcaffe {
 	  
 	  auto& all = result[i];
 	  auto& one = boundary[i];
-	  if(all.first  > one.first ) all.first  = one.first;
-	  if(all.second < one.second) all.second = one.second;
+	  if(all.start  > one.start ) all.start  = one.start;
+	  if(all.end < one.end) all.end = one.end;
 	  
 	}
       }
@@ -190,7 +190,7 @@ namespace larcaffe {
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "MCTrack Collection ... Plane " << plane 
-	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
       }
       
       return result;
@@ -208,7 +208,7 @@ namespace larcaffe {
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
-      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+      for(auto& r : result) { r.start = larcaffe::kINVALID_UINT; r.end = 0; }
       
       for(auto& step : mct) {
 	
@@ -218,8 +218,8 @@ namespace larcaffe {
 	if(tick < 0 || tick >= tick_max) continue;
 	
 	auto& trange = result.back();
-	if(trange.first  > (unsigned int)tick) trange.first  = tick;
-	if(trange.second < (unsigned int)tick) trange.second = tick;
+	if(trange.start  > (unsigned int)tick) trange.start  = tick;
+	if(trange.end < (unsigned int)tick) trange.end = tick;
 	
 	// Figure out wire per plane
 	xyz[0] = step.X();
@@ -248,8 +248,8 @@ namespace larcaffe {
 	  }
 	  
 	  
-	  if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
-	  if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
+	  if(result[plane].start  > wire_id.Wire) result[plane].start  = wire_id.Wire;
+	  if(result[plane].end < wire_id.Wire) result[plane].end = wire_id.Wire;
 
 	}
 	if(logger().info() ) {
@@ -262,7 +262,7 @@ namespace larcaffe {
 	    << " ... "
 	      << " z=" << xyz[2]
 	    //<< " wire=" << geom->NearestWireID(xyz, 2) 
-	    << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	    << " result[plane2]=[" << result[2].start << ", " << result[2].end << "]"
 	    << std::endl;
 	}
 	
@@ -270,7 +270,7 @@ namespace larcaffe {
       
       for(auto& r : result) 
 	
-	if(r.first == larcaffe::kINVALID_UINT && r.second == 0) r.first = 0;
+	if(r.start == larcaffe::kINVALID_UINT && r.end == 0) r.start = 0;
       
       if(logger().info()) {
 	
@@ -278,7 +278,7 @@ namespace larcaffe {
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Single MCTrack ... Plane " << plane 
-	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
       }
       
       return result;
@@ -296,7 +296,7 @@ namespace larcaffe {
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       
-      for(auto& r : result) { r.first = larcaffe::kINVALID_UINT; r.second = 0; }
+      for(auto& r : result) { r.start = larcaffe::kINVALID_UINT; r.end = 0; }
 
       const sim::MCStep& detprofile = mcsh.DetProfile();
       double energy = detprofile.E();
@@ -326,8 +326,8 @@ namespace larcaffe {
 	if(tick < 0 || tick >= tick_max) continue;
 	
 	auto& trange = result.back();
-	if(trange.first  > (unsigned int)tick) trange.first  = tick;
-	if(trange.second < (unsigned int)tick) trange.second = tick;
+	if(trange.start  > (unsigned int)tick) trange.start  = tick;
+	if(trange.end < (unsigned int)tick) trange.end = tick;
 	
 	// Figure out wire per plane
 	xyz[0] = step.X();
@@ -356,8 +356,8 @@ namespace larcaffe {
 	      	wire_id.Wire = 0;
 	    }
 	  
-	    if(result[plane].first  > wire_id.Wire) result[plane].first  = wire_id.Wire;
-	    if(result[plane].second < wire_id.Wire) result[plane].second = wire_id.Wire;
+	    if(result[plane].start  > wire_id.Wire) result[plane].start  = wire_id.Wire;
+	    if(result[plane].end < wire_id.Wire) result[plane].end = wire_id.Wire;
 
 	  }
 	  catch(...) {continue;}
@@ -374,7 +374,7 @@ namespace larcaffe {
 	    << " ... "
 	    << " z=" << xyz[2]
 	    //<< " wire=" << wire_id.Wire
-	    << " result[plane2]=[" << result[2].first << ", " << result[2].second << "]"
+	    << " result[plane2]=[" << result[2].start << ", " << result[2].end << "]"
 	    << std::endl;
 	}
 
@@ -382,7 +382,7 @@ namespace larcaffe {
       
       for(auto& r : result) 
 	
-	if(r.first == larcaffe::kINVALID_UINT && r.second == 0) r.first = 0;
+	if(r.start == larcaffe::kINVALID_UINT && r.end == 0) r.start = 0;
       
       if(logger().info()) {
 	
@@ -390,7 +390,87 @@ namespace larcaffe {
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Single MCShower ... Plane " << plane 
-	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
+      }
+      
+      return result;
+    }
+
+    RangeArray_t Cropper::WireTimeBoundary(const ::simb::MCParticle& mct) const
+    {
+      art::ServiceHandle<geo::Geometry> geom;
+      art::ServiceHandle<util::LArProperties> larp;
+      art::ServiceHandle<util::DetectorProperties> detp;
+      art::ServiceHandle<util::TimeService> ts;
+      const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns
+      const int tick_max = detp->NumberTimeSamples();
+      double xyz[3] = {0.};
+      
+      RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
+      
+      //for( int istep=0; istep<(int)mct.NumberTrajectoryPoints(); istep++ ) {
+      for ( auto &traj : mct.Trajectory() ) {
+	
+	// Figure out time
+	//int tick = (unsigned int)(ts->TPCG4Time2Tick( mct.T(istep) + ( mct.Vx(istep) / drift_velocity))) + 1;
+	int tick = (unsigned int)(ts->TPCG4Time2Tick( traj.first.T() + ( traj.first.X() / drift_velocity))) + 1;
+
+	if(tick < 0 || tick >= tick_max) continue;
+	
+	auto& trange = result.back();
+	if(trange.start  > (unsigned int)tick) trange.start  = tick;
+	if(trange.end < (unsigned int)tick) trange.end = tick;
+	
+	// Figure out wire per plane
+	xyz[0] = traj.first.X();
+	xyz[1] = traj.first.Y();
+	xyz[2] = traj.first.Z();
+	// xyz[0] = mct.Vx(istep);
+	// xyz[1] = mct.Vy(istep);
+	// xyz[2] = mct.Vz(istep);
+	for(size_t plane=0; plane < geom->Nplanes(); ++plane) {
+
+	  geo::WireID wire_id;
+	  try {
+	    wire_id = geom->NearestWireID(xyz, plane);
+	  }
+	  catch (geo::InvalidWireIDError& err) {
+	    wire_id.Wire = err.better_wire_number;
+	  }
+	  catch (...) {
+	    //std::cout << "out of bounds. using better number" << std::endl;
+	    if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	      	wire_id.Wire = geom->Nwires(plane);
+	    else
+	      wire_id.Wire = 0;
+	  }
+	  
+	  if(result[plane].start  > wire_id.Wire) result[plane].start  = wire_id.Wire;
+	  if(result[plane].end < wire_id.Wire) result[plane].end = wire_id.Wire;
+
+	}
+	if(logger().info() ) {
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
+	    << "x=" << xyz[0]
+	    <<" : t="<<traj.first.T() << " ns"
+	    <<" v=" << drift_velocity 
+	    << " t+x/v=" << traj.first.T() + ( traj.first.X() / drift_velocity) 
+	    << " tick=" << tick
+	    << " ... "
+	    << " z=" << xyz[2]
+	    << " result[plane2]=[" << result[2].start << ", " << result[2].end << "]"
+	    << std::endl;
+	}
+	
+      }
+      
+      if(logger().info()) {
+	
+	for(size_t plane=0; plane <= geom->Nplanes(); ++plane)
+	  
+	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
+	    << "Single MCParticle ... Plane " << plane 
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
       }
       
       return result;
@@ -403,7 +483,7 @@ namespace larcaffe {
       art::ServiceHandle<util::TimeService> ts;
       art::ServiceHandle<util::DetectorProperties> detp;
       RangeArray_t result(geom->Nplanes()+1);
-      for(auto& range : result) { range.first = 0; range.second = 0; }
+      for(auto& range : result) { range.start = 0; range.end = 0; }
       
       for(auto const& simch : simch_v) {
 	
@@ -414,13 +494,13 @@ namespace larcaffe {
 	auto& wire_range = result[wid.Plane];
 	auto& time_range = result.back();
 	
-	if(!wire_range.first && !wire_range.second)
+	if(!wire_range.start && !wire_range.end)
 	  
-	  wire_range.first = wire_range.second = wid.Wire;
+	  wire_range.start = wire_range.end = wid.Wire;
 	
 	else {
-	  if(wire_range.first  > wid.Wire) wire_range.first  = wid.Wire;
-	  if(wire_range.second < wid.Wire) wire_range.second = wid.Wire;
+	  if(wire_range.start  > wid.Wire) wire_range.start  = wid.Wire;
+	  if(wire_range.end < wid.Wire) wire_range.end = wid.Wire;
 	}
 	
 	for(auto const& tdc_ide : simch.TDCIDEMap()) {
@@ -431,13 +511,13 @@ namespace larcaffe {
 
 	  if(tick<0 || tick >= detp->NumberTimeSamples()) continue;
 	  
-	  if(!time_range.first && !time_range.second)
+	  if(!time_range.start && !time_range.end)
 	    
-	    time_range.first = time_range.second = tick;
+	    time_range.start = time_range.end = tick;
 	  
 	  else {
-	    if(time_range.first  > tick) time_range.first  = tick;
-	    if(time_range.second < tick) time_range.second = tick;
+	    if(time_range.start  > tick) time_range.start  = tick;
+	    if(time_range.end < tick) time_range.end = tick;
 	  }
 	}
       }
@@ -448,7 +528,7 @@ namespace larcaffe {
 	  
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Plane " << plane 
-	    << " bound " << result[plane].first << " => " << result[plane].second << std::endl;
+	    << " bound " << result[plane].start << " => " << result[plane].end << std::endl;
       }
 
       return result;
@@ -464,20 +544,20 @@ namespace larcaffe {
       // if inconsistent we throw
 
       // never filled
-      if ( range.first==larcaffe::kINVALID_UINT && range.second==0 ) {
+      if ( range.start==larcaffe::kINVALID_UINT && range.end==0 ) {
 	Range_t emptyrange;
-	emptyrange.first = emptyrange.second = 0;
+	emptyrange.start = emptyrange.end = 0;
 	return emptyrange;
       }
-      // if ( range.first==0 && range.second==0 ) {
+      // if ( range.start==0 && range.end==0 ) {
       // 	Range_t emptyrange;
-      // 	emptyrange.first = emptyrange.second = 0;
+      // 	emptyrange.start = emptyrange.end = 0;
       //   return emptyrange;
       // }
 
-      if(range.second < range.first) {
+      if(range.end < range.start) {
 	logger().LOG(msg::kERROR,__FUNCTION__,__LINE__)
-	  << "Inconsistent boundary given: max (" << range.second << ") < min (" << range.first << ") !" << std::endl;
+	  << "Inconsistent boundary given: max (" << range.end << ") < min (" << range.start << ") !" << std::endl;
 	throw larbys();
       }
       if(plane_id > geom->Nplanes()) {
@@ -504,28 +584,28 @@ namespace larcaffe {
       
       Range_t result;
 
-      if((int)(range.first) > max) {
+      if((int)(range.start) > max) {
         if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
-	    << "Image lower bound (" << range.first << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")" << std::endl;
+	    << "Image lower bound (" << range.start << ") too large for plane " << plane_id << " (only goes 0=>" << max << ")" << std::endl;
 	return result;
       }
 
-      // if(!range.first && !range.second) {
+      // if(!range.start && !range.end) {
       // 	if(logger().info()) 
       // 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__)
       // 	    << "Zero range provided. Nothing to format... " << std::endl;
       // 	return result;
       // }
       
-      const int center = ( range.first  + range.second ) / 2;
+      const int center = ( range.start  + range.end ) / 2;
 
       int upper_bound, lower_bound;
       if(!_compression_factor) {
-	upper_bound = center + (((int)(range.second) - center + padding) / target_width) * target_width - 1;
-	lower_bound = center - ((center - (int)(range.first) + padding) / target_width) * target_width ;
-	if(upper_bound < (int)(range.second)) upper_bound += target_width;
-	if(lower_bound > (int)(range.first) ) lower_bound -= target_width;
+	upper_bound = center + (((int)(range.end) - center + padding) / target_width) * target_width - 1;
+	lower_bound = center - ((center - (int)(range.start) + padding) / target_width) * target_width ;
+	if(upper_bound < (int)(range.end)) upper_bound += target_width;
+	if(lower_bound > (int)(range.start) ) lower_bound -= target_width;
       }else{
 	upper_bound = center + _compression_factor * target_width / 2 - 1;
 	lower_bound = center - _compression_factor * target_width / 2;
@@ -537,13 +617,13 @@ namespace larcaffe {
 
       // Case 1: extension do not cross hard-limit boundaries
       if(lower_bound >= 0 && upper_bound < max) {
-	result.first  = lower_bound;
-	result.second = upper_bound;
+	result.start  = lower_bound;
+	result.end = upper_bound;
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Range [a] @ plane " << plane_id
-	    << " ... Before " << range.first  << " => " << range.second
-	    << " ... After " << result.first << " => " << result.second
+	    << " ... Before " << range.start  << " => " << range.end
+	    << " ... After " << result.start << " => " << result.end
 	    << std::endl;
 	return result;
       }
@@ -551,38 +631,38 @@ namespace larcaffe {
       // Case 2: touching only the max bound
       if(lower_bound >=0 && upper_bound >= max) {
 	// just need to cover range min from the max-edge
-	result.second = max - 1;
+	result.end = max - 1;
 	if(!_compression_factor) {
-	  result.first  = max - target_width * ((max - (int)(range.first) - padding) / target_width);
-	  if(result.first > range.first && (int)(result.first) > target_width) result.first -= target_width;
+	  result.start  = max - target_width * ((max - (int)(range.start) - padding) / target_width);
+	  if(result.start > range.start && (int)(result.start) > target_width) result.start -= target_width;
 	}
-	else result.first = max - (target_width * _compression_factor);
+	else result.start = max - (target_width * _compression_factor);
 
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Range [b] @ plane " << plane_id
-	    << " ... Before " << range.first  << " => " << range.second
-	    << " ... After " << result.first << " => " << result.second
+	    << " ... Before " << range.start  << " => " << range.end
+	    << " ... After " << result.start << " => " << result.end
 	    << std::endl;
 	return result;
       }
       
       // Case3: touching only the min bound
       if(upper_bound < max && lower_bound < 0) {
-	result.first  = 0; // set to lower bound
+	result.start  = 0; // set to lower bound
 	if(!_compression_factor) {
-	  result.second = target_width * (((int)(range.second) + padding) / target_width);
-	  if((result.second < range.second) || range.second==0 ) result.second += target_width;
-	  if((int)(result.second) >= max) result.second -= target_width;
-	  result.second -= 1;
+	  result.end = target_width * (((int)(range.end) + padding) / target_width);
+	  if((result.end < range.end) || range.end==0 ) result.end += target_width;
+	  if((int)(result.end) >= max) result.end -= target_width;
+	  result.end -= 1;
 	}
-	else result.second = target_width * _compression_factor - 1;
+	else result.end = target_width * _compression_factor - 1;
 	
 	if(logger().info())
 	  logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	    << "Range [c] @ plane " << plane_id
-	    << " ... Before " << range.first  << " => " << range.second
-	    << " ... After " << result.first << " => " << result.second
+	    << " ... Before " << range.start  << " => " << range.end
+	    << " ... After " << result.start << " => " << result.end
 	    << std::endl;
 	return result;
       }
@@ -597,14 +677,14 @@ namespace larcaffe {
 	throw larbys();
       }
 
-      result.first  = lower_bound;
-      result.second = upper_bound;
+      result.start  = lower_bound;
+      result.end = upper_bound;
       
       if(logger().info())
 	logger().LOG(msg::kINFO,__FUNCTION__,__LINE__) 
 	  << "Range [d] @ plane " << plane_id
-	  << " ... Before " << range.first  << " => " << range.second
-	  << " ... After " << result.first << " => " << result.second
+	  << " ... Before " << range.start  << " => " << range.end
+	  << " ... After " << result.start << " => " << result.end
 	  << std::endl;
       return result;
     }
@@ -623,6 +703,43 @@ namespace larcaffe {
       for(size_t plane=0; plane <= geom->Nplanes(); ++plane)
 	
 	result[plane] = Format(boundary[plane], plane);
+      
+      return result;
+    }
+   
+    RangeArray_t Cropper::WireTimeBoundary( const std::vector<::larbys::supera::MCPTInfo>& interaction_bundles ) const {
+      art::ServiceHandle<geo::Geometry> geom;
+      RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
+      for (auto const& mcinfo : interaction_bundles ) {
+	RangeArray_t particlebounds;
+	if ( mcinfo.isTrack() ) 
+	  particlebounds = WireTimeBoundary( *(mcinfo.thetrack) );
+	else if ( mcinfo.isShower() ) 
+	  particlebounds = WireTimeBoundary( *(mcinfo.theshower) );
+	else if ( mcinfo.isMCParticle() )
+	  particlebounds = WireTimeBoundary( *(mcinfo.theparticle) );
+	else
+	  assert(false);
+
+	bool isempty = true;
+	for ( size_t plane=0; plane<particlebounds.size(); plane++ ) {
+	  if ( particlebounds.at(plane).isFilled() ) {
+	    isempty = false;
+	    break;
+	  }
+	}
+	
+	if ( isempty )
+	  continue;
+
+	for(size_t i=0; i<result.size(); ++i) {
+
+          auto& all = result[i];
+          auto& one = particlebounds[i];
+          if(all.start  > one.start ) all.start  = one.start;
+          if(all.end < one.end) all.end = one.end;
+	}
+      }//loop over interaction bundles
       
       return result;
     }

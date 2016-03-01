@@ -221,11 +221,11 @@ namespace larbys {
 	if ( daughterid==motherid )
 	  continue; // a parent, which we've already stored above
 
-	auto iter_ancestor_bundle = m_bundles.find( motherid );
-	if ( iter_ancestor_bundle==m_bundles.end() ) {
-	  std::cout << "daughter could not find mother. there should be no orphans? trackid=" << daughterid << " parentid=" << motherid << std::endl;
-	  assert(false);
-	}
+	//auto iter_ancestor_bundle = m_bundles.find( motherid );
+	// if ( iter_ancestor_bundle==m_bundles.end() ) {
+	//   std::cout << "warning: daughter could not find mother. there should be no orphans? trackid=" << daughterid << " parentid=" << motherid << std::endl;
+	//   //assert(false);
+	// }
 	MCPTInfo particle( it_sakura-trackmap->begin(),&(*it_sakura) );
 	m_bundles[motherid].emplace_back( particle );
       }
@@ -256,15 +256,19 @@ namespace larbys {
 	  std::cout << "   ";
 	  if ( (*it_sakura).isTrack() ) {
 	    std::cout << "TrackID " << (*it_sakura).thetrack->TrackID() << " pdg=" << (*it_sakura).thetrack->PdgCode() 
+		      << " origin=" << (*it_sakura).thetrack->Origin()
 		      << " ancestor=" << (*it_sakura).thetrack->AncestorTrackID() << " " << (*it_sakura).thetrack->Process();
 	  }
 	  else if ( (*it_sakura).isShower() ){
 	    std::cout << "ShowerID: " << (*it_sakura).theshower->TrackID() << " pdg=" << (*it_sakura).theshower->PdgCode() 
-			<< " ancestor=" << (*it_sakura).theshower->AncestorTrackID() << " " << (*it_sakura).theshower->Process();
+		      << " origin=" << (*it_sakura).theshower->Origin()
+		      << " ancestor=" << (*it_sakura).theshower->AncestorTrackID() << " " << (*it_sakura).theshower->Process();
 	  }
 	  else if ( (*it_sakura).isMCParticle() ) {
-	    std::cout << "ParticleID: " << (*it_sakura).theparticle->TrackId() << " pdg=" << (*it_sakura).theparticle->PdgCode();
-	  }
+	    std::cout << "ParticleID: " << (*it_sakura).theparticle->TrackId() 
+		      << " pdg=" << (*it_sakura).theparticle->PdgCode()
+		      << " status=" << (*it_sakura).theparticle->StatusCode();
+	      }
 	  std::cout << std::endl;
 	}//end of daughter loop
       }

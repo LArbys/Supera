@@ -42,19 +42,19 @@ namespace larbys {
       };
       virtual ~MCPTInfo() {};
 
-      bool isTrack() { 
+      bool isTrack() const { 
 	if (datatype==kTrack) 
 	  return true; 
 	else return false; 
       };
       
-      bool isShower() { 
+      bool isShower() const { 
 	if (datatype==kShower) 
 	  return true; 
 	else return false; 
       };
 
-      bool isMCParticle() { 
+      bool isMCParticle() const { 
 	if ( datatype==kParticle ) return true; else return false; 
       };
       

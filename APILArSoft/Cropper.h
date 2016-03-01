@@ -7,9 +7,12 @@
 #include "MCBase/MCTrack.h"
 #include "MCBase/MCShower.h"
 #include "Simulation/SimChannel.h"
+#include "SimulationBase/MCParticle.h"
 
 // LArCaffe
 #include "LArCaffe/larcaffe_base.h"
+
+#include "MCParticleTree.h"
 
 namespace larcaffe {
 
@@ -36,8 +39,9 @@ namespace larcaffe {
 	 Given single MCTrack, returns length 4 range array (3 planes + time) \n
 	 which contains all trajectory points of input MCTrack.
       */
-      RangeArray_t WireTimeBoundary( const sim::MCTrack& mct                ) const;
-      RangeArray_t WireTimeBoundary( const sim::MCShower& mcsh                ) const;
+      RangeArray_t WireTimeBoundary( const sim::MCTrack& mct     ) const;
+      RangeArray_t WireTimeBoundary( const sim::MCShower& mcsh   ) const;
+      RangeArray_t WireTimeBoundary( const simb::MCParticle& mct ) const;
       /**
 	 Given a collection of MCTracks, returns length 4 range array (3 planes + time) \n
 	 which contains all trajectory points of all input MCTracks.
@@ -50,6 +54,9 @@ namespace larcaffe {
       */
       RangeArray_t WireTimeBoundary( const std::vector<sim::SimChannel>& simch_v) const;
 
+      /** Given a collection of MCPTInfo vectors, return length 4 range array (3 planes+time) */
+      RangeArray_t WireTimeBoundary( const std::vector<::larbys::supera::MCPTInfo>& interaction_bundles ) const;
+      
       /**
 	 Given a range and corresponding plane ID (plan_id == #plane is considered time), \n
 	 perform padding & cropping to a multiple of target width/height.
