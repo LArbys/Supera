@@ -8,7 +8,7 @@ namespace larbys {
     // MCPTInfo
     // ----------------------------------------------------------------
 
-    unsigned int MCPTInfo::getID() {
+    unsigned int MCPTInfo::getID() const {
       switch ( datatype ) {
       case kTrack:
 	return thetrack->TrackID();
@@ -26,7 +26,7 @@ namespace larbys {
       return 0;
     }
     
-    int MCPTInfo::getAncestorID() {
+    int MCPTInfo::getAncestorID() const {
       switch ( datatype ) {
       case kTrack:
 	return thetrack->AncestorTrackID();
@@ -80,8 +80,26 @@ namespace larbys {
       return 0;
     }
 
+    std::string MCPTInfo::getProcess() const {
+      switch ( datatype ) {
+      case kTrack:
+	return thetrack->Process();
+	break;
+      case kShower:
+	return theshower->Process(); // start and end
+	break;
+      case kParticle:
+	return "primary";
+	break;
+      default:
+	assert(false);
+	break;
+      }
+      return "larbys";
+    }
+
     // Step data
-    void MCPTInfo::step4Pos( int istep, float vec[] ) {
+    void MCPTInfo::step4Pos( int istep, float vec[] ) const {
       switch ( datatype ) {
       case kTrack:
 	vec[0] = thetrack->at(istep).X();
@@ -102,6 +120,35 @@ namespace larbys {
 	vec[1] = theparticle->Trajectory().Y(istep);
 	vec[2] = theparticle->Trajectory().Z(istep);
 	vec[3] = theparticle->Trajectory().T(istep);
+        break;
+      default:
+        assert(false);
+        break;
+      }
+    }
+
+    // Step data
+    void MCPTInfo::start4Pos( float vec[] ) const {
+      switch ( datatype ) {
+      case kTrack:
+	if ( thetrack->size()>0 ) {
+	  vec[0] = thetrack->at(0).X();
+	  vec[1] = thetrack->at(0).Y();
+	  vec[2] = thetrack->at(0).Z();
+	  vec[3] = thetrack->at(0).T();
+	}
+	else {
+	  vec[0] = vec[1] = vec[2] = vec[3] = 0.0;
+	}
+        break;
+      case kShower:
+	calcShowerStart( vec );
+        break;
+      case kParticle:
+	vec[0] = theparticle->Trajectory().X(0);
+	vec[1] = theparticle->Trajectory().Y(0);
+	vec[2] = theparticle->Trajectory().Z(0);
+	vec[3] = theparticle->Trajectory().T(0);
         break;
       default:
         assert(false);
@@ -135,7 +182,7 @@ namespace larbys {
       }
     }
 
-    void MCPTInfo::calcShowerStart( float vec[] ) {
+    void MCPTInfo::calcShowerStart( float vec[] ) const {
       const sim::MCStep& detprofile = theshower->DetProfile();
       vec[0] = detprofile.X();
       vec[1] = detprofile.Y();
@@ -143,7 +190,7 @@ namespace larbys {
       vec[3] = detprofile.T();
     }
     
-    void MCPTInfo::calcShowerEnd( float vec[] ) {
+    void MCPTInfo::calcShowerEnd( float vec[] ) const {
       const sim::MCStep& detprofile = theshower->DetProfile();
       double energy = detprofile.E();
       if ( energy<1 )
@@ -309,6 +356,15 @@ namespace larbys {
 	if ( (int)shower.AncestorTrackID()<m_neutrino_interaction_particles[nuid] ) {
 	  MCPTInfo particle( 0, &shower );
 	  m_bundles[nuid].emplace_back( particle );
+	}
+      }
+    }
+
+    void MCParticleTree::determineVertex( float vertex[], const std::vector< MCPTInfo >& particles ) const {
+      for ( std::vector< MCPTInfo >::const_iterator it_particle=particles.begin(); it_particle!=particles.end(); it_particle++ ) {
+	if ( (int)(*it_particle).getID()==(int)(*it_particle).getAncestorID() ) {
+	  (*it_particle).start4Pos( vertex );
+	  break;
 	}
       }
     }

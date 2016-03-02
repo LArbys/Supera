@@ -100,12 +100,13 @@ private:
 			art::Handle< std::vector<recob::Wire> >& wireVecHandle );
   std::vector<larcaffe::RangeArray_t> setEventCrop(const art::Event& e);
   void ExtractImage( const art::Event& e, const std::vector<larcaffe::RangeArray_t>& region_v, std::vector<int>& applied_plane_compression_factors );
-  std::vector<larcaffe::RangeArray_t> findBoundingBoxes(const art::Event& e, std::vector<int>& interaction_indices );
+  std::vector<larcaffe::RangeArray_t> findBoundingBoxes( larbys::supera::MCParticleTree& particletree, std::vector<int>& interaction_indices );
   void processBoundingBoxes( const art::Event& e, 
 			     const std::vector<larcaffe::RangeArray_t>& bboxes, 
 			     const larcaffe::RangeArray_t& the_range_v, 
 			     const std::vector<int>& plane_compression,
-			     const std::vector<int>& interaction_indices );
+			     const std::vector<int>& interaction_indices,
+			     const larbys::supera::MCParticleTree& particletree );
   void getMCTruth( art::Event const & e );
   void clearBoundingBoxes();
 
@@ -167,7 +168,10 @@ private:
   std::vector<int>** m_plane_bb_hiright_t; // (ImageTree)
   std::vector<int>** m_plane_bb_hiright_w; // (ImageTree)
   std::vector<std::string>* m_bbox_label;  // (ImageTree)
-  std::vector<float>* m_plane_bb_3D_vertex;   //< the true vertex in 3D space of bounding box (ImageTree)
+  std::vector< float >* m_bb_3D_vertex_x;   //< the true vertex in 3D space of bounding box (ImageTree)
+  std::vector< float >* m_bb_3D_vertex_y;   //< the true vertex in 3D space of bounding box (ImageTree)
+  std::vector< float >* m_bb_3D_vertex_z;   //< the true vertex in 3D space of bounding box (ImageTree)
+  std::vector< float >* m_bb_3D_vertex_t;   //< the true vertex in 3D space of bounding box (ImageTree)
   std::vector<int>**   m_plane_bb_vertexpixel_tw; // (ImageTree)
 
 
@@ -367,7 +371,7 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::setEventCrop(const art::Event& e
   return image_v;
 }
 
-std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Event& e, std::vector<int>& interaction_indices ) 
+std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::supera::MCParticleTree& particletree, std::vector<int>& interaction_indices ) 
 {
   // we group tracks belong to same interaction and make a bounding box for it
   // we need to group cosmic rays and neutrino interactions
@@ -379,24 +383,6 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
 
   std::vector<larcaffe::RangeArray_t> image_v;
 
-  TStopwatch fWatch; fWatch.Start();
-  art::Handle<std::vector<sim::MCTrack> > mctHandle;
-  e.getByLabel("mcreco",mctHandle);
-  if(!mctHandle.isValid()) {
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-  art::Handle<std::vector<sim::MCShower>> mcshHandle;
-  e.getByLabel("mcreco",mcshHandle);
-  if(!mcshHandle.isValid()) {
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-  _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
-
-  // create sets of interactions
-  larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
-
   // neutrino interactions from MCTruth
   // art::Handle< std::vector<simb::MCTruth> > gentruth;
   // e.getByLabel( "generator", gentruth );
@@ -407,13 +393,7 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes(const art::Eve
   //   particletree.addNeutrinoInteraction( genie.at(ineutrino) );
   // }
   // _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
-  
-  // Parse Shower and Track info and bundle them by ancestor
-  fWatch.Start();
-  particletree.parse();
-  particletree.boom();
-  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
-
+ 
   m_interaction_list.clear();
   interaction_indices.clear();  
   for ( std::map< int, std::vector<larbys::supera::MCPTInfo> >::iterator it_bundle=particletree.m_bundles.begin(); it_bundle!=particletree.m_bundles.end(); it_bundle++ ) {
@@ -451,7 +431,8 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
 				       const std::vector<larcaffe::RangeArray_t>& bboxes, 
 				       const larcaffe::RangeArray_t& the_range_v,
 				       const std::vector<int>& plane_compression,
-				       const std::vector<int>& interaction_indices ) {
+				       const std::vector<int>& interaction_indices,
+				       const larbys::supera::MCParticleTree& particletree ) {
   // here we put them into the tree. we save the images if unstructed to do so
   // we list the position of the bounding boxes within the coordiante system of an event image (the_range_v)
 
@@ -469,7 +450,8 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
   // clear tree variables
   clearBoundingBoxes();
   
-  // get the data
+  // get the data/services
+  art::ServiceHandle<util::TimeService> ts;
   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
   art::Handle< std::vector<recob::Wire> > wireVecHandle;
   LoadDataHandles( e, digitVecHandle, wireVecHandle );
@@ -557,6 +539,21 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
     
     // save this bbox!
     m_bbox_label->push_back( m_interaction_list.at(ibox) );
+
+    // vertex
+    float bbvertex[4];
+    auto iter = particletree.m_bundles.find(interaction_indices.at(ibox));
+    if ( iter==particletree.m_bundles.end() ) {
+      std::cout << "WTF!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    particletree.determineVertex( bbvertex, (*iter).second ) ;
+    std::cout << "returned vertex." << std::endl;
+    m_bb_3D_vertex_x->push_back( bbvertex[0] );
+    m_bb_3D_vertex_y->push_back( bbvertex[1] );
+    m_bb_3D_vertex_z->push_back( bbvertex[2] );
+    m_bb_3D_vertex_t->push_back( ts->TPCG4Time2Tick(bbvertex[3]) );
+
     //sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
     m_BBTree->Fill();
     m_nfilledboxes++;
@@ -680,12 +677,38 @@ void BNBCosmics::analyze(art::Event const & e)
   //
   // Determine bounding boxes
   //
+
+  // first bundle the truth info
+  TStopwatch fWatch; fWatch.Start();
+  art::Handle<std::vector<sim::MCTrack> > mctHandle;
+  e.getByLabel("mcreco",mctHandle);
+  if(!mctHandle.isValid()) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  art::Handle<std::vector<sim::MCShower>> mcshHandle;
+  e.getByLabel("mcreco",mcshHandle);
+  if(!mcshHandle.isValid()) {
+    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
+    throw ::larcaffe::larbys();
+  }
+  _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
   
-  // get list of boxes
+  // create sets of interactions
+  larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
+  // Parse Shower and Track info and bundle them by ancestor
+  fWatch.Start();
+  particletree.parse();
+  particletree.boom();
+  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
+  
+  // get list of boxes for each interaction set
   std::vector<int> interaction_indices;
-  auto bboxes = findBoundingBoxes(e,interaction_indices);
+  auto bboxes = findBoundingBoxes( particletree, interaction_indices);
   // save them to ROOTFiles
-  processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices );
+  processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices, particletree );
+  // save auxillary information (vertex)
+  
     
   // save everything
   m_ImageTree->Fill();
@@ -759,7 +782,10 @@ void BNBCosmics::setupTrees() {
   m_pmtImage = new std::vector<int>;
 
   // allocate vertex vector for each plane
-  m_plane_bb_3D_vertex = new std::vector<float>;
+  m_bb_3D_vertex_x = new std::vector< float >;
+  m_bb_3D_vertex_y = new std::vector< float >;
+  m_bb_3D_vertex_z = new std::vector< float >;
+  m_bb_3D_vertex_t = new std::vector< float >;
   m_plane_bb_vertexpixel_tw = new std::vector<int>*[fNPlanes];
   for (int p=0; p<fNPlanes; p++) {
     m_plane_bb_vertexpixel_tw[p] = new std::vector<int>;
@@ -795,7 +821,10 @@ void BNBCosmics::setupTrees() {
     m_ImageTree->Branch( branchname, &(*m_planeImages[i]) );
   }
   // vertex
-  m_ImageTree->Branch( "bb_vertex", &(*m_plane_bb_3D_vertex) );
+  m_ImageTree->Branch( "bb_vertex_x", &(*m_bb_3D_vertex_x) );
+  m_ImageTree->Branch( "bb_vertex_y", &(*m_bb_3D_vertex_y) );
+  m_ImageTree->Branch( "bb_vertex_z", &(*m_bb_3D_vertex_z) );
+  m_ImageTree->Branch( "bb_vertex_t", &(*m_bb_3D_vertex_t) );
   // vertex for each bb in terms of pixel position
   for (int i=0; i<fNPlanes; i++) {
     char branchname[20];
@@ -877,7 +906,10 @@ void BNBCosmics::setupTrees() {
 void BNBCosmics::clearBoundingBoxes() {
   
   m_bbox_label->clear();
-  m_plane_bb_3D_vertex->clear();
+  m_bb_3D_vertex_x->clear();
+  m_bb_3D_vertex_y->clear();
+  m_bb_3D_vertex_z->clear();
+  m_bb_3D_vertex_t->clear();
   for (int plane=0; plane<fNPlanes; plane++) {
     // bounding box points
     m_plane_bb_loleft_t[plane]->clear();

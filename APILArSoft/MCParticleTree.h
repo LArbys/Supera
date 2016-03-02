@@ -59,14 +59,16 @@ namespace larbys {
 	if ( datatype==kParticle ) return true; else return false; 
       };
       
-      unsigned int getID();
-      int getAncestorID();
+      unsigned int getID() const;
+      int getAncestorID() const;
       int getPDG();
       unsigned int getNumSteps();
-      void step4Pos( int istep, float vec[] );
+      std::string getProcess() const;
+      void step4Pos( int istep, float vec[] ) const;
       void step4Mom( int istep, float vec[] );
-      void calcShowerStart( float vec[] );
-      void calcShowerEnd( float vec[] );
+      void start4Pos( float vec[] ) const;
+      void calcShowerStart( float vec[] ) const;
+      void calcShowerEnd( float vec[] ) const;
       
       DataType_t datatype;
       const sim::MCTrack* thetrack;
@@ -92,6 +94,7 @@ namespace larbys {
       void boom();  //< dump the batches
       void matchTrackToNeutrino( const sim::MCTrack& track );
       void matchShowerToNeutrino( const sim::MCShower& shower );
+      void determineVertex( float vertex[], const std::vector< MCPTInfo >& particles ) const;
       
       int num_neutrinos;
       std::map< int, std::vector<MCPTInfo> > m_bundles;

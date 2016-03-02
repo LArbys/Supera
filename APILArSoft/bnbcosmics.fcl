@@ -18,7 +18,7 @@ bnbcosmics: {
     # A hard-cut limit for outer edge of an image. A range is specified by [min,max] pair for each plane and time.
     # The last element is for the time and other elements respect plane ID. Length should be # planes + 1 for 
     # used geometry.
-    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[2400,7007]]
+    HardLimitRange: [[-1,-1],[-1,-1],[-1,-1],[400,5007]]
     # Cropping configurations
     EventCropperConfig: { 
         TimePadding:10      # Padding for time
