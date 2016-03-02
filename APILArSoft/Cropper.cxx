@@ -205,7 +205,7 @@ namespace larcaffe {
       art::ServiceHandle<util::TimeService> ts;
       const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns
       const int tick_max = detp->NumberTimeSamples();
-      const double wireplaneoffset_cm = 10.0; //cm (made up)
+      const double wireplaneoffset_cm = 7.0; //cm (made up)
       double xyz[3] = {0.};
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
@@ -306,11 +306,11 @@ namespace larcaffe {
       if (energy<1 )
 	return result;
       double showerlength = 13.8874 + 0.121734*energy - (3.75571e-05)*energy*energy;
-      showerlength *= 2.0;
+      showerlength *= 2.5;
       //double showerlength = 100.0;
       double detprofnorm = sqrt( detprofile.Px()*detprofile.Px() + detprofile.Py()*detprofile.Py() + detprofile.Pz()*detprofile.Pz() );
       TLorentzVector showerend;
-      const double wireplaneoffset_cm = 10.0; //cm (made up)
+      const double wireplaneoffset_cm = 7.0; //cm (made up)
       showerend[0] = detprofile.X()+showerlength*(detprofile.Px()/detprofnorm); 
       showerend[1] = detprofile.Y()+showerlength*(detprofile.Py()/detprofnorm); 
       showerend[2] = detprofile.Z()+showerlength*(detprofile.Pz()/detprofnorm); 

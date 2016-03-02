@@ -455,6 +455,7 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
   // get the data/services
   art::ServiceHandle<util::TimeService> ts;
   art::ServiceHandle<geo::Geometry> geom;
+  art::ServiceHandle<util::LArProperties> larp;
   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
   art::Handle< std::vector<recob::Wire> > wireVecHandle;
   LoadDataHandles( e, digitVecHandle, wireVecHandle );
@@ -559,7 +560,9 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
 
     // now we need to convert to pixel coordinates
     // the time coordinate
-    int bb_tick = (int)(ts->TPCG4Time2Tick( bbvertex[3] ))+1 - (int)the_range_v[fNPlanes].start;
+    const double drift_velocity = larp->DriftVelocity()*1.0e-3;
+    const double wireplane_offset = 7.0; //cm
+    int bb_tick = (int)(ts->TPCG4Time2Tick( bbvertex[3] + (bbvertex[0]+wireplane_offset)/drift_velocity ))+1 - (int)the_range_v[fNPlanes].start;
     bb_tick /= plane_compression.at(fNPlanes);
     m_plane_bb_vertexpixel_time->push_back( bb_tick );
 
