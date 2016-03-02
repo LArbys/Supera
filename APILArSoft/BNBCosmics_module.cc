@@ -405,15 +405,20 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::super
  
   m_interaction_list.clear();
   interaction_indices.clear();  
-  for ( std::map< int, std::vector<larbys::supera::MCPTInfo> >::iterator it_bundle=particletree.m_bundles.begin(); it_bundle!=particletree.m_bundles.end(); it_bundle++ ) {
+  //for ( std::map< int, std::vector<larbys::supera::MCPTInfo> >::iterator it_bundle=particletree.m_bundles.begin(); it_bundle!=particletree.m_bundles.end(); it_bundle++ ) {
+  for ( auto const& it_bundle : particletree.m_bundles) {
     // now find bounding box of each interaction
-    auto range_array = _cropper_interaction.Format( _cropper_interaction.WireTimeBoundary( (*it_bundle).second ) );
+    double deposit_energy = 0;
+    for(auto const& mcpt : it_bundle.second) deposit_energy += mcpt.calcDepositEnergy();
+    if(deposit_energy < 50) continue;
+
+    auto range_array = _cropper_interaction.Format( _cropper_interaction.WireTimeBoundary( it_bundle.second ) );
     
-    if ( (*it_bundle).first<0 )
+    if ( it_bundle.first<0 )
       std::cout << "[neutrino] ";
     else
       std::cout << "[cosmic] ";
-
+    std::cout << " energy " << deposit_energy << " ";
     if ( !larcaffe::RangesOK( range_array ) ) {
       std::cout << "Range of bundle is empty or invalid." << std::endl;
       continue;
@@ -424,9 +429,9 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::super
     }
 
     image_v.push_back( range_array ); // we put it into the collection
-    interaction_indices.push_back( (*it_bundle).first );
+    interaction_indices.push_back( it_bundle.first );
     // simple for now, but future we want cosmic_muon, cosmic_muon_wdecaye, cosmic_muon_wpizero, cosmic_emshower, cosmic_hadronic, cosmic_hadronic_wpizero
-    std::string thebblabel = labelBoundingBox( (*it_bundle).first, (*it_bundle).second );
+    std::string thebblabel = labelBoundingBox( it_bundle.first, it_bundle.second );
     m_interaction_list.push_back( thebblabel );
     // if ( (*it_bundle).first<0 )
     //   m_interaction_list.push_back( "neutrino" );
@@ -502,7 +507,7 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
       // enforce wire range bounds
       w_lo = std::max( w_lo, 0 );
       w_hi = std::min( w_hi, (int)the_range_v[plane].end-(int)the_range_v[plane].start);
-      
+
       _logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) 
 	<< "[Plane " << plane << " BBOX]"
 	<< " t=[" << (int)the_range_v[fNPlanes].start+t_lo << ", " << (int)the_range_v[fNPlanes].start+t_hi << "]"
@@ -1241,7 +1246,7 @@ std::string BNBCosmics::labelBoundingBox( int key, const std::vector<larbys::sup
 
   std::string label = "cosmic";
   for ( auto const& mcinfo : bundle ) {
-    if ( key==mcinfo.getAncestorID() ) {
+    if ( (int)mcinfo.getID()==(int)mcinfo.getAncestorID() ) {
       // this is the root particle
       if ( std::abs(mcinfo.getPDG())==13 )
 	label += "_muon";

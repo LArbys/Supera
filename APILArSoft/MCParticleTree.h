@@ -70,6 +70,7 @@ namespace larbys {
       void start4Pos( float vec[] ) const;
       void calcShowerStart( float vec[] ) const;
       void calcShowerEnd( float vec[] ) const;
+      double calcDepositEnergy() const;
       
       DataType_t datatype;
       const sim::MCTrack* thetrack;
@@ -96,7 +97,7 @@ namespace larbys {
       void matchTrackToNeutrino( const sim::MCTrack& track );
       void matchShowerToNeutrino( const sim::MCShower& shower );
       void determineVertex( float vertex[], const std::vector< MCPTInfo >& particles ) const;
-      
+      double depositedEnergy(const std::vector<MCPTInfo>& particles) const;
       int num_neutrinos;
       std::map< int, std::vector<MCPTInfo> > m_bundles;
       std::map< int, int > m_neutrino_interaction_particles; // number of interaction particles during initial fill (not counting attached daughters)
