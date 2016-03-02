@@ -62,6 +62,7 @@ namespace larbys {
       unsigned int getID() const;
       int getAncestorID() const;
       int getPDG() const;
+      int getMother() const;
       unsigned int getNumSteps();
       std::string getProcess() const;
       void step4Pos( int istep, float vec[] ) const;

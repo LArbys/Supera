@@ -26,7 +26,7 @@ namespace larcaffe {
 
     bool isFilled() const { return filled; };
     void setFilled() { filled = true; };
-    unsigned int size() { return std::abs((int)end-(int)start)+1; };
+    unsigned int size() const { return std::abs((int)end-(int)start)+1; };
 
     unsigned int start;
     unsigned int end;

@@ -43,6 +43,24 @@ namespace larbys {
       }
       return 0;
     }
+
+    int MCPTInfo::getMother() const {
+      switch ( datatype ) {
+      case kTrack:
+	return thetrack->MotherPdgCode();
+	break;
+      case kShower:
+	return theshower->MotherPdgCode();
+	break;
+      case kParticle:
+	return -1;
+	break;
+      default:
+	assert(false);
+	break;
+      }
+      return 0;
+    }
     
     int MCPTInfo::getPDG() const {
       switch ( datatype ) {

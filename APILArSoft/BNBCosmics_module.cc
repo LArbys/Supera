@@ -108,6 +108,7 @@ private:
 			     const std::vector<int>& plane_compression,
 			     const std::vector<int>& interaction_indices,
 			     const larbys::supera::MCParticleTree& particletree );
+  std::string labelBoundingBox( int key, const std::vector<larbys::supera::MCPTInfo>& bundle );
   void getMCTruth( art::Event const & e );
   void PreparePMTImage( const art::Event& e );
   void clearBoundingBoxes();
@@ -425,10 +426,12 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::super
     image_v.push_back( range_array ); // we put it into the collection
     interaction_indices.push_back( (*it_bundle).first );
     // simple for now, but future we want cosmic_muon, cosmic_muon_wdecaye, cosmic_muon_wpizero, cosmic_emshower, cosmic_hadronic, cosmic_hadronic_wpizero
-    if ( (*it_bundle).first<0 )
-      m_interaction_list.push_back( "neutrino" );
-    else
-      m_interaction_list.push_back( "cosmic" );
+    std::string thebblabel = labelBoundingBox( (*it_bundle).first, (*it_bundle).second );
+    m_interaction_list.push_back( thebblabel );
+    // if ( (*it_bundle).first<0 )
+    //   m_interaction_list.push_back( "neutrino" );
+    // else
+    //   m_interaction_list.push_back( "cosmic" );
   }
   
   return image_v;
@@ -1230,6 +1233,37 @@ void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
     }
   }
   
+}
+
+std::string BNBCosmics::labelBoundingBox( int key, const std::vector<larbys::supera::MCPTInfo>& bundle ) {
+  if ( key<0 )
+    return "neutrino";
+
+  std::string label = "cosmic";
+  for ( auto const& mcinfo : bundle ) {
+    if ( key==mcinfo.getAncestorID() ) {
+      // this is the root particle
+      if ( std::abs(mcinfo.getPDG())==13 )
+	label += "_muon";
+      else if ( std::abs(mcinfo.getPDG())==2112 )
+	label += "_neutron";
+      else if ( std::abs(mcinfo.getPDG())==2212 )
+	label += "_proton";
+      else
+	label += "_other";
+    }
+    else {
+      if ( std::abs(mcinfo.getPDG())==11 && mcinfo.getProcess()=="Decay" ) {
+	label += "_wedecay";
+	return label;
+      }
+      else if ( std::abs(mcinfo.getPDG())==22 && mcinfo.getMother()==111 ) {
+	label += "_wpizero";
+	return label;
+      }
+    }
+  }
+  return label;
 }
 
 DEFINE_ART_MODULE(BNBCosmics)
