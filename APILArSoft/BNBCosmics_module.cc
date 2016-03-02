@@ -48,6 +48,7 @@
 #include "SimulationBase/MCNeutrino.h" // NuTools
 #include "MCBase/MCTrack.h" // LArData
 #include "MCBase/MCShower.h" // LArData
+#include "RawData/OpDetWaveform.h" // LArData
 
 #include "ConverterAPI.h"
 #include "SuperaCore/lmdb_converter.h"
@@ -108,7 +109,7 @@ private:
 			     const std::vector<int>& interaction_indices,
 			     const larbys::supera::MCParticleTree& particletree );
   void getMCTruth( art::Event const & e );
-  void PreparePMTImage();
+  void PreparePMTImage( const art::Event& e );
   void clearBoundingBoxes();
 
   // ----------------------------------------------------------------------
@@ -118,6 +119,7 @@ private:
   std::string fImageSource; //< [RawDigits, Wire, Hit]
   fhicl::ParameterSet fProducers; // name of producers
   bool fSkipNeutrons;
+  std::string fOpDataModule;
 
   ::larcaffe::RangeArray_t _wiretime_range_hard_v; //< ranges for (planes,...,time ticks)
 
@@ -137,7 +139,8 @@ private:
   TTree* m_ImageTree; //< whole image crop
   TTree* m_BBTree;    //< interaction image crop
   std::vector<int>** m_planeImages; //< [planeid][row-major 2D image]
-  std::vector<int>* m_pmtImage; // [row-major 2D image]
+  std::vector<int>* m_pmtImageHighGain; // [row-major 2D image]
+  std::vector<int>* m_pmtImageLowGain; // [row-major 2D image]
   int m_event; //< event ID (ImageTree,BBTree)
   int m_subrun; //< subrun ID (ImageTree,BBTree)
   int m_run; //< run ID (ImageTree,BBTree)
@@ -249,6 +252,9 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
       << "Unexpected Image source, " << fImageSource << ". choices: RawDigit, Wire, Hit." << std::endl;
     throw ::larcaffe::larbys();    
   }
+
+  // Producer for waveforms
+  fOpDataModule = p.get<std::string>("OpDataModule");
   
   // cropper parameters
   fhicl::ParameterSet cropper_params = p.get<fhicl::ParameterSet>("EventCropperConfig");
@@ -746,8 +752,9 @@ void BNBCosmics::analyze(art::Event const & e)
   auto bboxes = findBoundingBoxes( particletree, interaction_indices);
   // save them to ROOTFiles
   processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices, particletree );
-  // save auxillary information (vertex)
-  
+
+  // save pmt image
+  PreparePMTImage( e );
     
   // save everything
   m_ImageTree->Fill();
@@ -818,8 +825,9 @@ void BNBCosmics::setupTrees() {
     m_bb_planeImages[p] = new std::vector<int>;
   }
   // allocate image for PMT
-  m_pmtImage = new std::vector<int>;
-
+  m_pmtImageHighGain = new std::vector<int>;
+  m_pmtImageLowGain  = new std::vector<int>;
+  
   // allocate vertex vector for each plane
   m_bb_3D_vertex_x = new std::vector< float >;
   m_bb_3D_vertex_y = new std::vector< float >;
@@ -860,6 +868,9 @@ void BNBCosmics::setupTrees() {
     sprintf( branchname, "img_plane%d", i );
     m_ImageTree->Branch( branchname, &(*m_planeImages[i]) );
   }
+  // pmt image branches
+  m_ImageTree->Branch( "img_pmt_highgain", &(*m_pmtImageHighGain) );
+  m_ImageTree->Branch( "img_pmt_lowgain", &(*m_pmtImageLowGain) );
   // vertex
   m_ImageTree->Branch( "bb_vertex_x", &(*m_bb_3D_vertex_x) );
   m_ImageTree->Branch( "bb_vertex_y", &(*m_bb_3D_vertex_y) );
@@ -1135,8 +1146,90 @@ void BNBCosmics::LoadDataHandles( const art::Event& e,
   }
 }
 
-void BNBCosmics::PreparePMTImage() {
+void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
   // we try to fit the PMT into 
+  int imgwidth  = _cropper.TargetWidth();  // pmt number
+  int imgheight = _cropper.TargetHeight(); // time
+
+  art::Handle< std::vector< raw::OpDetWaveform > > hgHandle;
+  art::Handle< std::vector< raw::OpDetWaveform > > lgHandle;
+  evt.getByLabel( fOpDataModule, "OpdetCosmicHighGain", hgHandle);
+  evt.getByLabel( fOpDataModule, "OpdetBeamLowGain",  lgHandle);
+
+  int nchannels = 32;
+  int nticks = 1500;
+  int tickblock = nticks/imgheight;
+  int pedestal = 2047;
+  
+  // clear the image
+  m_pmtImageHighGain->resize( imgheight*imgwidth, 0.0 );
+  m_pmtImageLowGain->resize( imgheight*imgwidth, 0.0 );
+  
+  // we will tile PMT the data
+  int ncopies = imgwidth/nchannels;
+
+  // fill high gain image
+  std::vector<raw::OpDetWaveform> const& hgwfms(*hgHandle);
+  for (auto &wfm : hgwfms)  {
+    int readout_ch = (int)wfm.ChannelNumber();
+    int femch = readout_ch%100;
+    if ( readout_ch%100>=nchannels )
+      continue;
+    
+    // skip cosmic windows
+    if ( wfm.size()<1000 )
+      continue;
+    
+    //float dt_usec = wfm.TimeStamp()-trig_timestamp;
+    //std::cout << " ch=" << readout_ch << " dt=" << dt_usec;
+    
+    int colindex = ncopies*femch;
+    for (int timg=0; timg<imgheight; timg++) {
+      int adcval = wfm.at( timg*tickblock )-pedestal;
+      // maxpool the waveform
+      for (int tb=1; tb<tickblock; tb++) {
+	if ( wfm.at( timg*tickblock + tb )-pedestal>adcval )
+	  adcval = wfm.at( timg*tickblock + tb )-pedestal;
+      }
+      // tile the data
+      for ( int icpy=0; icpy<ncopies; icpy++ ) {
+	int index = timg*imgwidth + colindex+icpy;
+	m_pmtImageHighGain->at( index ) = adcval;
+      }
+    }
+  }
+
+  // fill low gain image
+  std::vector<raw::OpDetWaveform> const& lgwfms(*lgHandle);
+  for (auto &wfm : lgwfms)  {
+    int readout_ch = (int)wfm.ChannelNumber();
+    int femch = readout_ch%100;
+    if ( readout_ch%100>=nchannels )
+      continue;
+    
+    // skip cosmic windows
+    if ( wfm.size()<1000 )
+      continue;
+    
+    //float dt_usec = wfm.TimeStamp()-trig_timestamp;
+    //std::cout << " ch=" << readout_ch << " dt=" << dt_usec;
+    
+    int colindex = ncopies*femch;
+    for (int timg=0; timg<imgheight; timg++) {
+      int adcval = wfm.at( timg*tickblock )-pedestal;
+      // maxpool the waveform
+      for (int tb=1; tb<tickblock; tb++) {
+	if ( wfm.at( timg*tickblock + tb )-pedestal>adcval )
+	  adcval = wfm.at( timg*tickblock + tb )-pedestal;
+      }
+      // tile the data
+      for ( int icpy=0; icpy<ncopies; icpy++ ) {
+	int index = timg*imgwidth + colindex+icpy;
+	m_pmtImageLowGain->at( index ) = adcval;
+      }
+    }
+  }
+  
 }
 
 DEFINE_ART_MODULE(BNBCosmics)

@@ -12,6 +12,8 @@ bnbcosmics: {
     Producers:   { RawDigit:"daq"
                    Wire:"caldata"
                    Hit:"hits" }
+    # PMT Producer modulename
+    OpDataModule: "pmtreadout"
     # Verbosity level, 1 = INFO and quite verbose. 0 will potentially kill your terminal. 2 is normal
     Verbosity:   0
 
