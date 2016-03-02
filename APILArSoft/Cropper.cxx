@@ -205,6 +205,7 @@ namespace larcaffe {
       art::ServiceHandle<util::TimeService> ts;
       const double drift_velocity = larp->DriftVelocity()*1.0e-3; // make it cm/ns
       const int tick_max = detp->NumberTimeSamples();
+      const double wireplaneoffset_cm = 10.0; //cm (made up)
       double xyz[3] = {0.};
       
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
@@ -214,7 +215,7 @@ namespace larcaffe {
       for(auto& step : mct) {
 	
 	// Figure out time
-	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + (step.X() / drift_velocity))) + 1;
+	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + ((step.X()+wireplaneoffset_cm) / drift_velocity))) + 1;
 
 	if(tick < 0 || tick >= tick_max) continue;
 	
@@ -304,10 +305,12 @@ namespace larcaffe {
       double energy = detprofile.E();
       if (energy<1 )
 	return result;
-      //double showerlength = 13.8874 + 0.121734*energy - (3.75571e-05)*energy*energy;
-      double showerlength = 100.0;
+      double showerlength = 13.8874 + 0.121734*energy - (3.75571e-05)*energy*energy;
+      showerlength *= 2.0;
+      //double showerlength = 100.0;
       double detprofnorm = sqrt( detprofile.Px()*detprofile.Px() + detprofile.Py()*detprofile.Py() + detprofile.Pz()*detprofile.Pz() );
       TLorentzVector showerend;
+      const double wireplaneoffset_cm = 10.0; //cm (made up)
       showerend[0] = detprofile.X()+showerlength*(detprofile.Px()/detprofnorm); 
       showerend[1] = detprofile.Y()+showerlength*(detprofile.Py()/detprofnorm); 
       showerend[2] = detprofile.Z()+showerlength*(detprofile.Pz()/detprofnorm); 
@@ -321,7 +324,7 @@ namespace larcaffe {
       for(auto& step : step_v) {
 	
 	// Figure out time
-	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + (step.X() / drift_velocity))) + 1;
+	int tick = (unsigned int)(ts->TPCG4Time2Tick(step.T() + ( (step.X()+wireplaneoffset_cm) / drift_velocity))) + 1;
 
 	if(tick < 0 || tick >= tick_max) continue;
 	
@@ -607,7 +610,7 @@ namespace larcaffe {
       int upper_bound, lower_bound;
       if(!_compression_factor) {
 	upper_bound = center + (((int)(range.end) - center + padding) / target_width) * target_width - 1;
-	lower_bound = center - ((center - (int)(range.start) + padding) / target_width) * target_width ;
+	lower_bound = center - ((center - (int)(range.start) - padding) / target_width) * target_width ;
 	if(upper_bound < (int)(range.end)) upper_bound += target_width;
 	if(lower_bound > (int)(range.start) ) lower_bound -= target_width;
       }else{
@@ -716,6 +719,14 @@ namespace larcaffe {
       RangeArray_t result(4); // result is 3 planes' wire boundary + time boundary (4 elements)
       for (auto const& mcinfo : interaction_bundles ) {
 	RangeArray_t particlebounds;
+
+	// be rid of neutral particles
+	if ( mcinfo.getPDG()==2112 || mcinfo.getPDG()==22 || (mcinfo.getPDG()>10000) )
+	  continue;
+	
+	// determine energy lost
+	
+	
 	if ( mcinfo.isTrack() ) 
 	  particlebounds = WireTimeBoundary( *(mcinfo.thetrack) );
 	else if ( mcinfo.isShower() ) 
@@ -734,7 +745,6 @@ namespace larcaffe {
 	}
 
 	for(size_t i=0; i<result.size(); ++i) {
-
           auto& all = result[i];
           auto& one = particlebounds[i];
           if(all.start  > one.start ) all.start  = one.start;

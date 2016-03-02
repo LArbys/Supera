@@ -108,6 +108,7 @@ private:
 			     const std::vector<int>& interaction_indices,
 			     const larbys::supera::MCParticleTree& particletree );
   void getMCTruth( art::Event const & e );
+  void PreparePMTImage();
   void clearBoundingBoxes();
 
   // ----------------------------------------------------------------------
@@ -172,7 +173,8 @@ private:
   std::vector< float >* m_bb_3D_vertex_y;   //< the true vertex in 3D space of bounding box (ImageTree)
   std::vector< float >* m_bb_3D_vertex_z;   //< the true vertex in 3D space of bounding box (ImageTree)
   std::vector< float >* m_bb_3D_vertex_t;   //< the true vertex in 3D space of bounding box (ImageTree)
-  std::vector<int>**   m_plane_bb_vertexpixel_tw; // (ImageTree)
+  std::vector<int>**   m_plane_bb_vertexpixel_wire; // (ImageTree)
+  std::vector<int>*    m_plane_bb_vertexpixel_time; // (ImageTree)
 
 
   char m_label[50];
@@ -452,6 +454,7 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
   
   // get the data/services
   art::ServiceHandle<util::TimeService> ts;
+  art::ServiceHandle<geo::Geometry> geom;
   art::Handle< std::vector<raw::RawDigit> > digitVecHandle;
   art::Handle< std::vector<recob::Wire> > wireVecHandle;
   LoadDataHandles( e, digitVecHandle, wireVecHandle );
@@ -553,6 +556,39 @@ void BNBCosmics::processBoundingBoxes( const art::Event& e,
     m_bb_3D_vertex_y->push_back( bbvertex[1] );
     m_bb_3D_vertex_z->push_back( bbvertex[2] );
     m_bb_3D_vertex_t->push_back( ts->TPCG4Time2Tick(bbvertex[3]) );
+
+    // now we need to convert to pixel coordinates
+    // the time coordinate
+    int bb_tick = (int)(ts->TPCG4Time2Tick( bbvertex[3] ))+1 - (int)the_range_v[fNPlanes].start;
+    bb_tick /= plane_compression.at(fNPlanes);
+    m_plane_bb_vertexpixel_time->push_back( bb_tick );
+
+    double xyz[3] = { (double)bbvertex[0], (double)bbvertex[1], (double)bbvertex[2] };
+
+    for (int iplane=0; iplane<fNPlanes; iplane++) {
+      geo::WireID wire_id;
+      try {
+	wire_id = geom->NearestWireID(xyz, iplane);
+      }
+      catch (geo::InvalidWireIDError& err) {
+	//std::cout << "out of bounds. using better number" << std::endl;
+	// if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	// 	wire_id.Wire = geom->Nwires(plane);
+	// else
+	    // 	wire_id.Wire = 0;
+	wire_id.Wire = err.better_wire_number;
+      }
+      catch (...) {
+	//std::cout << "out of bounds. using better number" << std::endl;
+	if ( std::fabs(xyz[2]-1000.0) < std::fabs(xyz[2]) )
+	  wire_id.Wire = geom->Nwires(iplane);
+	else
+	  wire_id.Wire = 0;
+      }
+      int bbwire = (int)wire_id.Wire - (int)the_range_v[iplane].start;
+      bbwire /= plane_compression.at(iplane);
+      m_plane_bb_vertexpixel_wire[iplane]->push_back( bbwire );
+    }
 
     //sprintf( m_bblabel, m_interaction_list.at(ibox).c_str() );
     m_BBTree->Fill();
@@ -786,10 +822,11 @@ void BNBCosmics::setupTrees() {
   m_bb_3D_vertex_y = new std::vector< float >;
   m_bb_3D_vertex_z = new std::vector< float >;
   m_bb_3D_vertex_t = new std::vector< float >;
-  m_plane_bb_vertexpixel_tw = new std::vector<int>*[fNPlanes];
+  m_plane_bb_vertexpixel_wire = new std::vector<int>*[fNPlanes];
   for (int p=0; p<fNPlanes; p++) {
-    m_plane_bb_vertexpixel_tw[p] = new std::vector<int>;
+    m_plane_bb_vertexpixel_wire[p] = new std::vector<int>;
   }
+  m_plane_bb_vertexpixel_time = new std::vector<int>;
 
   // Define ImageTree Branches
   // --------------------------
@@ -826,14 +863,15 @@ void BNBCosmics::setupTrees() {
   m_ImageTree->Branch( "bb_vertex_z", &(*m_bb_3D_vertex_z) );
   m_ImageTree->Branch( "bb_vertex_t", &(*m_bb_3D_vertex_t) );
   // vertex for each bb in terms of pixel position
+  m_ImageTree->Branch( "bb_vertex_time", &(*m_plane_bb_vertexpixel_time) );
   for (int i=0; i<fNPlanes; i++) {
     char branchname[20];
-    sprintf( branchname, "bb_plane%d_vertex_tw", i );
-    m_ImageTree->Branch( branchname, &(*m_plane_bb_vertexpixel_tw[i]) );
+    sprintf( branchname, "bb_plane%d_vertex_wire", i );
+    m_ImageTree->Branch( branchname, &(*m_plane_bb_vertexpixel_wire[i]) );
   }
   // bounding box info setup below
   
-
+  
   // Define Bounding Box Tree Branches
   // -----------------------------------
   // indexes
@@ -910,6 +948,7 @@ void BNBCosmics::clearBoundingBoxes() {
   m_bb_3D_vertex_y->clear();
   m_bb_3D_vertex_z->clear();
   m_bb_3D_vertex_t->clear();
+  m_plane_bb_vertexpixel_time->clear();
   for (int plane=0; plane<fNPlanes; plane++) {
     // bounding box points
     m_plane_bb_loleft_t[plane]->clear();
@@ -920,8 +959,9 @@ void BNBCosmics::clearBoundingBoxes() {
     m_plane_bb_hiright_w[plane]->clear();
     m_plane_bb_hileft_t[plane]->clear();
     m_plane_bb_hileft_w[plane]->clear();
-    m_plane_bb_vertexpixel_tw[plane]->clear();
+    m_plane_bb_vertexpixel_wire[plane]->clear();
   }
+
 }
   
 void BNBCosmics::ExtractImage( const art::Event& e, const std::vector<larcaffe::RangeArray_t>& region_v, std::vector<int>& plane_compression ) {
@@ -1090,6 +1130,10 @@ void BNBCosmics::LoadDataHandles( const art::Event& e,
     throw ::larcaffe::larbys();
     return;
   }
+}
+
+void BNBCosmics::PreparePMTImage() {
+  // we try to fit the PMT into 
 }
 
 DEFINE_ART_MODULE(BNBCosmics)

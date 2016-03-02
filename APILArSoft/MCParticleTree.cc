@@ -44,7 +44,7 @@ namespace larbys {
       return 0;
     }
     
-    int MCPTInfo::getPDG() {
+    int MCPTInfo::getPDG() const {
       switch ( datatype ) {
       case kTrack:
 	return thetrack->PdgCode();
