@@ -203,6 +203,23 @@ namespace larbys {
       vec[3] = detprofile.T();
     }
 
+    double MCPTInfo::calcDepositEnergy() const {
+      if(thetrack && thetrack->size() &&
+	 (thetrack->PdgCode() ==  13 ||
+	  thetrack->PdgCode() == -13 ||
+	  thetrack->PdgCode() ==  2212 ||
+	  thetrack->PdgCode() == 321 ||
+	  thetrack->PdgCode() == -321 ||
+	  thetrack->PdgCode() == 211 ||
+	  thetrack->PdgCode() == -211 ||
+	  thetrack->PdgCode() == 321 ||
+	  thetrack->PdgCode() == 2224 || 
+	  thetrack->PdgCode() == 2214 ||
+	  thetrack->PdgCode() == 1114)) { return (thetrack->front().E() - thetrack->back().E()); }
+      if(theshower) { return theshower->DetProfile().E(); }
+      return 0;
+    }
+
     // ----------------------------------------------------------------
     // MCParticleTree
     // ----------------------------------------------------------------
@@ -367,6 +384,13 @@ namespace larbys {
 	  break;
 	}
       }
+    }
+
+    double MCParticleTree::depositedEnergy(const std::vector<MCPTInfo>& particles) const {
+      double result=0;
+      for ( std::vector< MCPTInfo >::const_iterator it_particle=particles.begin(); it_particle!=particles.end(); it_particle++ )
+	result += (*it_particle).calcDepositEnergy();
+      return result;
     }
     
     void MCParticleTree::boom() {
