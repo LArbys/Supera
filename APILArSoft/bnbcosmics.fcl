@@ -49,5 +49,6 @@ bnbcosmics: {
     FilterConfigs: {}
     # Other Knobs
     SkipNeutrons: false
+    HasNeutrino: true
 }
 #END_PROLONG
