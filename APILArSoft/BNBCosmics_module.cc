@@ -702,17 +702,8 @@ void BNBCosmics::analyze(art::Event const & e)
   m_subrun = (int)e.subRun();
   
   // Get MC Truth
-  //getMCTruth( e );
-    
-  
-  // // Label
-  // if ( fSingleParticleMode )
-  //   sprintf(m_label, "%s_%d_%d_%d", singlepname.c_str(), m_run, m_subrun, m_event );
-  // else if ( fCosmicsMode )
-  //   sprintf(m_label, "cosmics_%d_%d_%d", m_run, m_subrun, m_event );
-  // else
-  //   sprintf(m_label, "nu_%d_%d_%d_mode_%d", m_run, m_subrun, m_event, m_mode );
-  
+  getMCTruth( e );
+
   //
   // Save event image
   //
