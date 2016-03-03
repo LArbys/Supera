@@ -157,8 +157,8 @@ private:
   bool fUseWire;
   bool fGroupAllInteractions;
   bool fUseSimChannel;
-  bool fCosmicsMode;
   bool fSingleParticleMode;
+  bool fHasNeutrino;
   std::string singlepname;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
@@ -264,6 +264,7 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
   // crop interactions
   fSkipNeutrons = p.get<bool>( "SkipNeutrons", false );
 
+  fHasNeutrino = p.get<bool>("HasNeutrino",false);
 
   // ------------------------------------------------------
   // Configure Croppers
@@ -620,7 +621,7 @@ void BNBCosmics::getMCTruth( art::Event const & e ) {
   // GENIE data to get interaction mode and neutrino energy if possible
   art::Handle< std::vector<simb::MCTruth> > gentruth;
   e.getByLabel( "generator", gentruth );
-  if ( fCosmicsMode || fSingleParticleMode || !gentruth.isValid() ) {
+  if ( !fHasNeutrino ) {
     _logger.LOG(::larcaffe::msg::kINFO, __FUNCTION__,__LINE__) << "No GENIE Truth. Must be Cosmic Event" << std::endl;
     m_flavor = -1;
     m_mode = -1;
