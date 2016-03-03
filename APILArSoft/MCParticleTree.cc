@@ -273,7 +273,8 @@ namespace larbys {
       // mc particles: we store this in one bundle
       // in the future, this needs to handle multiple neutrinos
 
-      // note: origin=1 means neutrino. for microboone, there is only one.  in sbnd, there might be two. but right now
+      // note: origin=1 means neutrino. origin=0 is single particle. for microboone, there is only one.  
+      // in sbnd, there might be two. but right now
       // the mctrack/mcshower is not filled correctly to separate neutrino interactions
       // so if we have origin one, we add to the neutrino group
 
@@ -285,8 +286,8 @@ namespace larbys {
 	  continue;
 	}
 
-	if ( (*it_track).Origin()==1 ) {
-	  // neutrinos
+	if ( (*it_track).Origin()==1 || (*it_track).Origin()==0 ) {
+	  // neutrinos or single particle
 	  int nuid = -1;
 	  if ( m_bundles.find(nuid)==m_bundles.end() ) {
 	    m_bundles.emplace( -1, std::vector<MCPTInfo>() ).first;
@@ -310,7 +311,7 @@ namespace larbys {
 	  continue;
 	}
 
-	if ( (*it_shower).Origin()==1 ) {
+	if ( (*it_shower).Origin()==1 || (*it_shower).Origin()==0 ) {
 	  // neutrinos
 	  int nuid = -1;
 	  if ( m_bundles.find(nuid)==m_bundles.end() ) {
@@ -334,11 +335,11 @@ namespace larbys {
       for ( std::vector<sim::MCTrack>::const_iterator it_sakura=trackmap->begin(); it_sakura!=trackmap->end(); it_sakura++ ) {
 	int daughterid = (*it_sakura).TrackID();
 	int motherid = (*it_sakura).AncestorTrackID();
-	if ( daughterid==motherid || (*it_sakura).Origin()==1 )
+	if ( daughterid==motherid || (*it_sakura).Origin()==1 || (*it_sakura).Origin()==0 )
 	  continue; // a parent or neutrino, which we've already stored above
 
 	int origin = (*it_sakura).Origin();
-	if (origin==1 ) {
+	if (origin==1 || origin==0 ) {
 	  // direct neutrino interaction daughter
 	  matchTrackToNeutrino( *it_sakura );
 	}
@@ -353,11 +354,11 @@ namespace larbys {
       for ( std::vector<sim::MCShower>::const_iterator it_sakura=showermap->begin(); it_sakura!=showermap->end(); it_sakura++ ) {
 	int daughterid = (*it_sakura).TrackID();
 	int motherid = (*it_sakura).AncestorTrackID();
-	if ( daughterid==motherid || (*it_sakura).Origin()==1 )
-	  continue; // a parent, which we've already stored above
-
 	int origin = (*it_sakura).Origin();
-	if (origin==1 ) {
+	if ( daughterid==motherid || origin==1 || origin==0 )
+	  continue; // a parent, which we've already stored above
+	
+	if (origin==1 || origin==0) {
 	  // direct neutrino interaction daughter
 	  matchShowerToNeutrino( *it_sakura );
 	}
@@ -372,7 +373,7 @@ namespace larbys {
 	  m_bundles[motherid].emplace_back( particle );
 	}
       }
-	
+      
     }//end of mctrack/mcshower parser
 
     void MCParticleTree::matchTrackToNeutrino( const sim::MCTrack& track ) {
@@ -394,7 +395,7 @@ namespace larbys {
 	}
       }
     }
-
+    
     void MCParticleTree::determineVertex( float vertex[], const std::vector< MCPTInfo >& particles ) const {
       for ( std::vector< MCPTInfo >::const_iterator it_particle=particles.begin(); it_particle!=particles.end(); it_particle++ ) {
 	if ( (int)(*it_particle).getID()==(int)(*it_particle).getAncestorID() ) {
