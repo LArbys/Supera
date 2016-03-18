@@ -1,3 +1,5 @@
+*cmake
+*CMakeFiles
 *Dict.cxx
 *Dict.h
 *Dict.cc
@@ -13,3 +15,4 @@ build
 SuperaCore/caffe.pb.h
 SuperaCore/caffe.pb.cc
 SuperaCore/caffe.pb.cxx
+*~
