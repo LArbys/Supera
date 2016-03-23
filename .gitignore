@@ -1,3 +1,5 @@
+*.depend
+*.pcm
 *cmake
 *CMakeFiles
 *Dict.cxx

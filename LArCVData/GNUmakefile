@@ -1,0 +1,29 @@
+#
+# This is an example GNUmakefile for my packages
+#
+PACKAGE_NAME = LArCVData
+
+# specific names for this package
+SHLIB = lib${PACKAGE_NAME}.so
+SOURCES = $(wildcard *.cxx)
+FMWK_HEADERS = LinkDef.h
+HEADERS = $(filter-out $(FMWK_HEADERS), $(wildcard *.h))
+
+# include options for this package
+INCFLAGS  = -I.                       #Include itself
+INCFLAGS += -I$(OPENCV_INCDIR)
+INCFLAGS += -I$(LARCV_BASEDIR)
+
+# platform-specific options
+OSNAME          = $(shell uname -s)
+HOST            = $(shell uname -n)
+OSNAMEMODE      = $(OSNAME)
+
+include $(LARCV_BASEDIR)/Makefile/Makefile.${OSNAME}
+
+LDFLAGS += -L$(OPENCV_LIBDIR) -lopencv_core -lopencv_highgui -lopencv_imgcodecs
+LDFLAGS += -L$(LARCV_LIBDIR) -lLArCV
+
+# call the common GNUmakefile
+include $(LARCV_BASEDIR)/Makefile/GNUmakefile.CORE
+
