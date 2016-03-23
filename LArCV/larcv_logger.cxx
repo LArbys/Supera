@@ -36,7 +36,8 @@ namespace larcv {
 			     const std::string& file_name) const
   {
     auto& strm(send(level,function));
-    strm << file_name.c_str() << "::L" << line_num << " ";
+    // FIXME temporary operation to fetch file name from full path
+    strm << file_name.substr(file_name.rfind("/")+1,file_name.size()).c_str() << "::L" << line_num << " ";
     return strm;
   }
 }

@@ -77,7 +77,16 @@ namespace larcv {
     void clear();
   };
 
-  typedef std::vector<larcv::Image2D> Image2DArray;
+  //typedef std::vector<larcv::Image2D> Image2DArray;
+  
+  /*
+  class Image2DArray : public std::vector<larcv::Image2D> {
+  public:
+    Image2DArray() : std::vector<larcv::Image2D>() {}
+    ~Image2DArray(){}
+  };
+  */  
+  //typedef std::vector<larcv::Image2D> Image2DArray;
 
 }
 

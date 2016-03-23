@@ -34,34 +34,6 @@ namespace larcv {
   /// Used as an invalid value identifier for unsigned int
   const unsigned int kINVALID_UINT = std::numeric_limits<unsigned int>::max();
 
-  /*
-  class Range_t {
-  public:
-    Range_t( unsigned int start_, unsigned int end_ ) {
-      start = start_;
-      end = end_;
-      filled = true;
-    }
-    Range_t() {
-      start = kINVALID_UINT;
-      end = 0;
-      filled = false;
-    }
-    virtual ~Range_t() {};
-
-    bool isFilled() const { return filled; };
-    void setFilled() { filled = true; };
-    unsigned int size() const { return std::abs((int)end-(int)start)+1; };
-
-    unsigned int start;
-    unsigned int end;
-    bool filled = false;
-
-  };
-
-  typedef ::std::vector<Range_t> RangeArray_t;
-  */
-
   //typedef ::std::pair<unsigned int, unsigned int> Range_t;
 
   //typedef ::std::vector<Range_t> RangeArray_t;

@@ -14,10 +14,9 @@ namespace larcv {
     : _img(meta.num_pixel_row()*meta.num_pixel_column(),0.)
     , _meta(meta)
   {}
-
   /*
   Image2D::Image2D(const Image2D& rhs) 
-    : _img(rhs)
+    : _img(rhs._img)
     , _meta(rhs._meta)
   {}
   */

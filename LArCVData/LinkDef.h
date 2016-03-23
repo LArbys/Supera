@@ -11,13 +11,15 @@
 
 // Classes
 #pragma link C++ class larcv::ImageMeta+;
-#pragma link C++ class std::vector<float>+;
-//#pragma link C++ class larcv::std::vector<float>+;
 #pragma link C++ class larcv::Image2D+;
 #pragma link C++ class std::vector<larcv::ImageMeta>+;
 #pragma link C++ class std::vector<larcv::Image2D>+;
+//#pragma link C++ class larcv::Image2DArray+;
+//#pragma link C++ class larcv::IOManager<larcv::Image2DArray>+;
 #pragma link C++ class larcv::IOManager<larcv::ImageMeta>+;
+#pragma link C++ class larcv::IOManager<std::vector<larcv::ImageMeta> >+;
 #pragma link C++ class larcv::IOManager<larcv::Image2D>+;
+#pragma link C++ class larcv::IOManager<std::vector<larcv::Image2D> >+;
 //ADD_NEW_CLASS ... do not change this line
 
 #endif

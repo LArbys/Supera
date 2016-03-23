@@ -24,7 +24,6 @@
 #pragma link C++ class larcv::logger+;
 #pragma link C++ class larcv::larcv_base+;
 #pragma link C++ class larcv::larbys+;
-//#pragma link C++ class larcv::IOManager+;
 //ADD_NEW_CLASS ... do not change this line
 
 // Functions
