@@ -7,19 +7,47 @@ namespace larcv {
 
   Image2D::Image2D(size_t width_npixel, size_t height_npixel )
     : _img(height_npixel*width_npixel,0.)
-    , _meta(0.,0.,width_npixel,height_npixel,0.,0.)
-  {}
+    , _meta(width_npixel,height_npixel,width_npixel,height_npixel,0.,0.)
+  {import_array();}
 
   Image2D::Image2D(const ImageMeta& meta)
     : _img(meta.num_pixel_row()*meta.num_pixel_column(),0.)
     , _meta(meta)
-  {}
-  /*
+  {import_array();}
+
   Image2D::Image2D(const Image2D& rhs) 
     : _img(rhs._img)
     , _meta(rhs._meta)
-  {}
-  */
+  {import_array();}
+
+  Image2D::Image2D(const std::string image_file)
+    : _img(0,0.)
+    , _meta(0.,0.,1,1,0.,0.)
+  { imread(image_file); import_array();}
+
+  void Image2D::imread(const std::string file_name)
+  {
+    ::cv::Mat image;
+    image = ::cv::imread(file_name.c_str(), CV_LOAD_IMAGE_COLOR);
+
+    _img.resize(image.cols * image.rows);
+
+    _meta = ImageMeta(image.rows,image.cols,image.rows, image.cols, 0., 0.);
+      
+    unsigned char* px_ptr = (unsigned char*)image.data;
+    int cn = image.channels();
+    
+    for(int i=0;i<image.rows;i++) {
+      for (int j=0;j<image.cols;j++) {
+	float q = 0;
+	q += (float)(px_ptr[i*image.cols*cn + j*cn + 0]);               //B
+	q += (float)(px_ptr[i*image.cols*cn + j*cn + 1]) * 256.;        //G
+	q += (float)(px_ptr[i*image.cols*cn + j*cn + 2]) * 256. * 256.; //R
+	set_pixel(i,j,q);
+      }
+    }
+  }
+
   void Image2D::resize(size_t width_npixel, size_t height_npixel ) 
   {
     _img.resize(height_npixel*width_npixel);
@@ -35,8 +63,10 @@ namespace larcv {
   void Image2D::clear_data() { for(auto& v : _img) v = 0.; }
 
   void Image2D::set_pixel( size_t w, size_t h, float value ) {
-    if ( h >= _meta._height_npixel || w >= _meta._width_npixel ) throw larbys("Out-of-bound pixel set request!");
-      return;
+    if ( h >= _meta._height_npixel || w >= _meta._width_npixel ) {
+      std::cout<<w<<" : "<<h<<std::endl;
+      throw larbys("Out-of-bound pixel set request!");
+    }
     _img[w*_meta._height_npixel + h] = value;
   }
 
@@ -44,7 +74,7 @@ namespace larcv {
   { for(auto& v : _img) v=value; }
   
   float Image2D::pixel( size_t w, size_t h ) const 
-  { return _img[index(h,w)]; }
+  { return _img[index(w,h)]; }
 
   size_t Image2D::index( size_t w, size_t h ) const {
     
@@ -55,11 +85,10 @@ namespace larcv {
 
   void Image2D::copy(size_t w, size_t h, const float* src, size_t num_pixel) 
   { 
-    const size_t idx = index(h,w);
+    const size_t idx = index(w,h);
     if(idx+num_pixel >= _img.size()) throw larbys("memcpy size exceeds allocated memory!");
     
     memcpy(&(_img[idx]),src, num_pixel * sizeof(float));
-
   }
 
   void Image2D::copy(size_t w, size_t h, const std::vector<float>& src, size_t num_pixel) 
@@ -74,7 +103,7 @@ namespace larcv {
 
   void Image2D::copy(size_t w, size_t h, const short* src, size_t num_pixel) 
   {
-    const size_t idx = index(h,w);
+    const size_t idx = index(w,h);
     if(idx+num_pixel >= _img.size()) throw larbys("memcpy size exceeds allocated memory!");
     
     for(size_t i=0; i<num_pixel; ++i) _img[idx+i] = src[num_pixel];
@@ -133,10 +162,35 @@ namespace larcv {
   void Image2D::compress(size_t height, size_t width, CompressionModes_t mode)
   { _img = copy_compress(height,width,mode); }
 
-  /*
+  void Image2D::imshow(const std::string frame_name) const{
+    ::cv::imshow(frame_name.c_str(),as_mat());
+  }
+
   cv::Mat Image2D::as_mat() const
   {
-    return cv::Mat(width(),height(),CV_32FC1,&(((std::vector<float>)_img)[0]));
+    cv::Mat img(height(),width(),CV_8UC3);
+    
+    unsigned char* px_ptr = (unsigned char*)img.data;
+    int cn = img.channels();
+    
+    for(int i=0;i<height();i++) {
+      for (int j=0;j<width();j++) {
+	
+	float q = pixel(j,height()-i-1);
+	px_ptr[i*img.cols*cn + j*cn + 0] = (unsigned char)(((int)(q+0.5)));
+	px_ptr[i*img.cols*cn + j*cn + 1] = (unsigned char)(((int)(q+0.5))/256);
+	px_ptr[i*img.cols*cn + j*cn + 2] = (unsigned char)(((int)(q+0.5))/256/256);
+      }
+    }
+    return img;
   }
-  */  
+
+  PyObject* Image2D::as_ndarray() const
+  {
+    int* dim_data = new int[2];
+    dim_data[0] = width();
+    dim_data[1] = height();
+    
+    return PyArray_FromDimsAndData( 2, dim_data, NPY_FLOAT, (char*) &(_img[0]));
+  }
 }

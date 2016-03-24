@@ -209,7 +209,7 @@ namespace larcv {
       return false;
     }
 
-    LARCV_INFO() << "Saving new entry: " << _tree_entries << std::endl;
+    LARCV_INFO() << "Saving new entry " << std::endl;
 
     for(auto& t : _out_tree_v) {
       if(!t) break;

@@ -31,7 +31,7 @@ export LARCV_BASEDIR
 #
 # Define directories to be compile upon a global "make"...
 #
-SUBDIRS := LArCV LArCVData
+SUBDIRS := LArCV LArCVData Utils
 
 #####################################################################################
 #

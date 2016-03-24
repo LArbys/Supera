@@ -15,6 +15,10 @@
 #define __LARCV_IMAGEMETA_H__
 
 #include <iostream>
+#ifndef __CINT__
+#include <opencv2/opencv.hpp>
+#include <opencv2/core/core.hpp>
+#endif
 #include "LArCV/larbys.h"
 #include "LArCV/LArCVTypes.h"
 
@@ -80,6 +84,72 @@ namespace larcv {
       _width_npixel  = width_npixel;
       _height_npixel = height_npixel;
     }
+
+    #ifndef __CINT__
+    /// Change # of vertical/horizontal pixels in meta data with cv::Mat as an input
+    void update(const ::cv::Mat& mat)
+    { update(mat.rows,mat.cols); }
+    /// Provide AABox
+
+    ::cv::Rect rectangle(const ImageMeta& meta,bool for_imshow=false) const
+    {
+      double x_min = meta.origin().x;
+      double x_max = meta.origin().x + meta.width();
+      double y_min = meta.origin().y;
+      double y_max = meta.origin().y + meta.height();
+
+      double bb_x_min = origin().x < x_min ? x_min : origin().x;
+      double bb_x_max = (origin().x + width()) > x_max ? x_max : (origin().x + width());
+      double bb_y_min = origin().y < y_min ? y_min : origin().y;
+      double bb_y_max = (origin().y + height()) > y_max ? y_max : (origin().y + height());
+
+      std::cout<<"Image bounds: " << std::endl
+	       <<"("<<x_min<<","<<y_min<<") "
+	       <<"("<<x_min<<","<<y_max<<") "
+	       <<"("<<x_max<<","<<y_max<<") "
+	       <<"("<<x_max<<","<<y_min<<") "
+	       << std::endl;
+
+      std::cout<<"BB bounds: " << std::endl
+	       <<"("<<bb_x_min<<","<<bb_y_min<<") "
+	       <<"("<<bb_x_min<<","<<bb_y_max<<") "
+	       <<"("<<bb_x_max<<","<<bb_y_max<<") "
+	       <<"("<<bb_x_max<<","<<bb_y_min<<") "
+	       << std::endl;
+
+      double res_x_min = (bb_x_min - meta.origin().x) / meta.pixel_width();
+      double res_y_min = (bb_y_min - meta.origin().y) / meta.pixel_height();
+      double res_x_size = (bb_x_max - bb_x_min) / meta.pixel_width();
+      double res_y_size = (bb_y_max - bb_y_min) / meta.pixel_height();
+
+      std::cout<<"Combined bounds: " << std::endl
+	       <<"("<<res_x_min<<","<<res_y_min<<") "
+	       <<"("<<res_x_min<<","<<res_y_min + res_y_size<<") "
+	       <<"("<<res_x_min + res_x_size<<","<<res_y_min + res_y_size<<") "
+	       <<"("<<res_x_min + res_x_size<<","<<res_y_min<<") "
+	       << std::endl;
+      /*
+      auto rec = ::cv::Rect( res_x_min, res_y_min, res_x_size, res_y_size );
+      std::cout<<"("<<rec.tl().x<<","<<rec.tl().y<<") ("<<rec.br().x<<","<<rec.br().y<<")"<<std::endl;
+      return rec;
+      */
+      
+      if(!for_imshow) return ::cv::Rect( res_x_min, res_y_min, res_x_size, res_y_size );
+      else {
+	// x becomes y
+	// y becomes x then inverted (i.e. y_min = width - y_max)
+	/*
+	res_y_min = res_x_min;
+	res_x_min = (meta.height() - (bb_y_max - meta.origin().y)) / meta.pixel_height(); // x_min
+	std::swap(res_x_size,res_y_size);
+	return ::cv::Rect( res_x_min, res_y_min, res_x_size, res_y_size );
+	*/
+	return ::cv::Rect(res_x_min, meta.height() - (bb_y_max - meta.origin().y) / meta.pixel_height(),
+			  res_x_size, res_y_size);
+      }
+
+    }
+    #endif
 
   protected:
 

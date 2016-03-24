@@ -22,18 +22,6 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #endif
-
-struct _object;
-typedef _object PyObject;
-
-#ifndef __CLING__
-#ifndef __CINT__
-#include <Python.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/ndarrayobject.h>
-#endif
-#endif
-
 namespace larcv {
 
   /**
@@ -48,7 +36,7 @@ namespace larcv {
     Image2D(size_t width_npixel=0, size_t height_npixel=0);
     Image2D(const ImageMeta&);
     Image2D(const Image2D&);
-    Image2D(const std::string img_file);
+    Image2D(const std::string img_file, bool as_imshow=false);
     
 #ifndef __CINT__
     Image2D(const cv::Mat&);
@@ -58,9 +46,11 @@ namespace larcv {
 
     enum CompressionModes_t { kSum, kAverage, kMaxPool};
 
-    void imread(const std::string file_name);//, bool as_imshow=false);
+    void imread(const std::string file_name, bool as_imshow=false);
+    void imwrite(const std::string file_name) const;
+    void imwrite(const std::string file_name,const std::vector<larcv::ImageMeta>& bbs) const;
     void imshow(const std::string frame_name) const;
-    
+    void imshow(const std::string frame_name,const std::vector<larcv::ImageMeta>& bbs) const;
     const ImageMeta& meta_data() const { return _meta; }
     unsigned int height() const { return _meta._height_npixel; }
     unsigned int width()  const { return _meta._width_npixel;  }
@@ -77,8 +67,7 @@ namespace larcv {
     { return _img; }
 
     #ifndef __CINT__
-    cv::Mat as_mat() const;
-    PyObject* as_ndarray() const;
+    cv::Mat as_mat(bool for_imshow=false) const;
     #endif
 
     void resize( size_t width_npixel, size_t height_npixel );
