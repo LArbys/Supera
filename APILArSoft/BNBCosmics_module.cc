@@ -49,6 +49,7 @@
 #include "MCBase/MCTrack.h" // LArData
 #include "MCBase/MCShower.h" // LArData
 #include "RawData/OpDetWaveform.h" // LArData
+#include "Utilities/TimeService.h" // LArCore?
 
 #include "ConverterAPI.h"
 #include "SuperaCore/lmdb_converter.h"
@@ -159,6 +160,7 @@ private:
   bool fUseSimChannel;
   bool fSingleParticleMode;
   bool fHasNeutrino;
+  bool fIsMC;
   std::string singlepname;
 
   // bounding boxes: stuck doing this because want to make flat branch tree
@@ -264,7 +266,11 @@ BNBCosmics::BNBCosmics(fhicl::ParameterSet const & p)
   // crop interactions
   fSkipNeutrons = p.get<bool>( "SkipNeutrons", false );
 
+  // tell module to look for neutrino MC truth info
   fHasNeutrino = p.get<bool>("HasNeutrino",false);
+
+  // is the file MC?
+  fIsMC = p.get<bool>("IsMC");
 
   // ------------------------------------------------------
   // Configure Croppers
@@ -700,9 +706,6 @@ void BNBCosmics::analyze(art::Event const & e)
   m_event  = (int)e.event();
   m_run    = (int)e.run();
   m_subrun = (int)e.subRun();
-  
-  // Get MC Truth
-  getMCTruth( e );
 
   //
   // Save event image
@@ -718,43 +721,51 @@ void BNBCosmics::analyze(art::Event const & e)
   // Extract it and save to ROOT file
   std::vector<int> applied_plane_compression_factors;
   ExtractImage( e, region_v, applied_plane_compression_factors );
-  
-  //
-  // Determine bounding boxes
-  //
-
-  // first bundle the truth info
-  TStopwatch fWatch; fWatch.Start();
-  art::Handle<std::vector<sim::MCTrack> > mctHandle;
-  e.getByLabel("mcreco",mctHandle);
-  if(!mctHandle.isValid()) {
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-  art::Handle<std::vector<sim::MCShower>> mcshHandle;
-  e.getByLabel("mcreco",mcshHandle);
-  if(!mcshHandle.isValid()) {
-    _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
-    throw ::larcaffe::larbys();
-  }
-  _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
-  
-  // create sets of interactions
-  larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
-  // Parse Shower and Track info and bundle them by ancestor
-  fWatch.Start();
-  particletree.parse();
-  particletree.boom();
-  _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
-  
-  // get list of boxes for each interaction set
-  std::vector<int> interaction_indices;
-  auto bboxes = findBoundingBoxes( particletree, interaction_indices);
-  // save them to ROOTFiles
-  processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices, particletree );
 
   // save pmt image
   PreparePMTImage( e );
+  
+
+  // Get MC Truth
+  if ( fIsMC ) {
+
+    getMCTruth( e );
+    
+    
+    //
+    // Determine bounding boxes
+    //
+    
+    // first bundle the truth info
+    TStopwatch fWatch; fWatch.Start();
+    art::Handle<std::vector<sim::MCTrack> > mctHandle;
+    e.getByLabel("mcreco",mctHandle);
+    if(!mctHandle.isValid()) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCTrack info (cannot make image-per-interaction)!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    art::Handle<std::vector<sim::MCShower>> mcshHandle;
+    e.getByLabel("mcreco",mcshHandle);
+    if(!mcshHandle.isValid()) {
+      _logger.LOG(::larcaffe::msg::kCRITICAL,__FUNCTION__,__LINE__) << "Missing MCShower info (cannot make image-per-interaction)!" << std::endl;
+      throw ::larcaffe::larbys();
+    }
+    _time_prof_v[kIO_LARSOFT] += fWatch.RealTime();
+    
+    // create sets of interactions
+    larbys::supera::MCParticleTree particletree( *mctHandle, *mcshHandle );
+    // Parse Shower and Track info and bundle them by ancestor
+    fWatch.Start();
+    particletree.parse();
+    particletree.boom();
+    _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
+  
+    // get list of boxes for each interaction set
+    std::vector<int> interaction_indices;
+    auto bboxes = findBoundingBoxes( particletree, interaction_indices);
+    // save them to ROOTFiles
+    processBoundingBoxes( e, bboxes, region_v[0], applied_plane_compression_factors, interaction_indices, particletree );
+  }
     
   // save everything
   m_ImageTree->Fill();
@@ -1153,7 +1164,7 @@ void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
 
   art::Handle< std::vector< raw::OpDetWaveform > > hgHandle;
   art::Handle< std::vector< raw::OpDetWaveform > > lgHandle;
-  evt.getByLabel( fOpDataModule, "OpdetCosmicHighGain", hgHandle);
+  evt.getByLabel( fOpDataModule, "OpdetBeamHighGain", hgHandle);
   evt.getByLabel( fOpDataModule, "OpdetBeamLowGain",  lgHandle);
 
   int nchannels = 32;
@@ -1168,6 +1179,13 @@ void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
   // we will tile PMT the data
   int ncopies = imgwidth/nchannels;
 
+  // get trigger information
+  art::ServiceHandle<util::TimeService> ts;
+  float trig_timestamp = ts->TriggerTime();
+
+  float dt_usec = wfm.TimeStamp()-trig_timestamp;
+  
+
   // fill high gain image
   std::vector<raw::OpDetWaveform> const& hgwfms(*hgHandle);
   for (auto &wfm : hgwfms)  {
@@ -1179,9 +1197,7 @@ void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
     // skip cosmic windows
     if ( wfm.size()<1000 )
       continue;
-    
-    //float dt_usec = wfm.TimeStamp()-trig_timestamp;
-    //std::cout << " ch=" << readout_ch << " dt=" << dt_usec;
+        //std::cout << " ch=" << readout_ch << " dt=" << dt_usec;
     
     int colindex = ncopies*femch;
     for (int timg=0; timg<imgheight; timg++) {

@@ -37,3 +37,6 @@ physics:
 
  end_paths:     [ analyzeIt ]
 }
+
+
+physics.analyzers.bnbcosmics.HasNeutrino: false
