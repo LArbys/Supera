@@ -1,0 +1,6 @@
+
+#BEGIN_PROLONG
+imagedivider: {
+    module_type: "ImageDivider"
+}
+#END_PROLONG

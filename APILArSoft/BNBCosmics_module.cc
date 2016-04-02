@@ -1181,10 +1181,7 @@ void BNBCosmics::PreparePMTImage( const art::Event& evt ) {
 
   // get trigger information
   art::ServiceHandle<util::TimeService> ts;
-  float trig_timestamp = ts->TriggerTime();
-
-  float dt_usec = wfm.TimeStamp()-trig_timestamp;
-  
+  //float trig_timestamp = ts->TriggerTime();
 
   // fill high gain image
   std::vector<raw::OpDetWaveform> const& hgwfms(*hgHandle);
