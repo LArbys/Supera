@@ -400,19 +400,10 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::super
   std::vector<larcaffe::RangeArray_t> image_v;
 
   // neutrino interactions from MCTruth
-  // art::Handle< std::vector<simb::MCTruth> > gentruth;
-  // e.getByLabel( "generator", gentruth );
-  // // below is not needed
-  // const std::vector<simb::MCTruth>& genie = *gentruth;
-  // fWatch.Start();
-  // for (int ineutrino=0; ineutrino<(int)genie.size(); ineutrino++) {
-  //   particletree.addNeutrinoInteraction( genie.at(ineutrino) );
-  // }
-  // _time_prof_v[kIO_MCTRACK] += fWatch.RealTime();
  
   m_interaction_list.clear();
   interaction_indices.clear();  
-  //for ( std::map< int, std::vector<larbys::supera::MCPTInfo> >::iterator it_bundle=particletree.m_bundles.begin(); it_bundle!=particletree.m_bundles.end(); it_bundle++ ) {
+
   for ( auto const& it_bundle : particletree.m_bundles) {
     // now find bounding box of each interaction
     double deposit_energy = 0;
@@ -440,10 +431,6 @@ std::vector<larcaffe::RangeArray_t> BNBCosmics::findBoundingBoxes( larbys::super
     // simple for now, but future we want cosmic_muon, cosmic_muon_wdecaye, cosmic_muon_wpizero, cosmic_emshower, cosmic_hadronic, cosmic_hadronic_wpizero
     std::string thebblabel = labelBoundingBox( it_bundle.first, it_bundle.second );
     m_interaction_list.push_back( thebblabel );
-    // if ( (*it_bundle).first<0 )
-    //   m_interaction_list.push_back( "neutrino" );
-    // else
-    //   m_interaction_list.push_back( "cosmic" );
   }
   
   return image_v;
@@ -636,12 +623,6 @@ void BNBCosmics::getMCTruth( art::Event const & e ) {
     m_Enu = 0.0;
     const std::vector<simb::MCTruth>& genie = *gentruth;
     m_Enu = genie.at(0).GetParticle(0).E();
-    // m_vertex.resize(4, 0.0 );
-    // m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
-    // m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
-    // m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
-    // m_vertex.at(3) = genie.at(0).GetParticle(0).T();
-
   }
   else {
   
@@ -659,35 +640,7 @@ void BNBCosmics::getMCTruth( art::Event const & e ) {
     // Get neutrino energy
     m_Enu = genie.at(0).GetNeutrino().Nu().E();
 
-    // Get Vertex
-    // m_vertex.resize(4, 0.0);
-    // m_vertex.at(0) = genie.at(0).GetParticle(0).Vx();
-    // m_vertex.at(1) = genie.at(0).GetParticle(0).Vy();
-    // m_vertex.at(2) = genie.at(0).GetParticle(0).Vz();
-    // m_vertex.at(3) = genie.at(0).GetParticle(0).T();
-
   }
-
-  // Get Vertex in terms of time and wire
-  //art::ServiceHandle<geo::Geometry> geom;
-    
-  //const int tick_max = detp->NumberTimeSamples();
-  
-  // vertex stuff
-  // m_vertex_tw.resize(geom->Nplanes()+1,0);
-  // for (size_t iplane=0; iplane<geom->Nplanes(); iplane++) {
-  //   geo::WireID wire_id;
-  //   try {
-  //     wire_id = geom->NearestWireID(m_vertex.data(), iplane);
-  //   }
-  //   catch (geo::InvalidWireIDError& err) {
-  //     //std::cout << "out of bounds. using better number" << std::endl;
-  //     wire_id.Wire = err.better_wire_number;
-  //   }
-  //   m_vertex_tw.at(iplane) = wire_id.Wire;
-  // }  
-  // int tick = (int)(ts->TPCG4Time2Tick(m_vertex.at(3) + (m_vertex.at(0) / drift_velocity))) + 1;
-  // m_vertex_tw.at(3) = tick;
   
 }
   
@@ -729,6 +682,7 @@ void BNBCosmics::analyze(art::Event const & e)
   // Get MC Truth
   if ( fIsMC ) {
 
+    
     getMCTruth( e );
     
     
@@ -1065,16 +1019,6 @@ void BNBCosmics::ExtractImage( const art::Event& e, const std::vector<larcaffe::
 	img.compress( _cropper.TargetHeight(), _cropper.TargetWidth(), larcaffe::Image::kMaxPool );
       }
       
-      // also need to transform vertex_tw into (time,wire) coordinates of this cropped image (filled already in getMC above)
-      //m_vertex_tw.at(plane) = (int)(m_vertex_tw.at(plane)-wire_range.start)/plane_compression[plane];
-      
-      // std::cout << "[Check Compressed Image]" << std::endl;
-      // for (int t=0; t<(int)(img.height());t++) {
-      //   std::cout << img.pixel( t, 1 ) << " ";
-      // }
-      // std::cout << std::endl;
-      
-      
       // transfer image to ROOT variables
       m_planeImages[plane]->resize( img.height()*img.width() );
       for ( int w=0; w<(int)img.width(); w++) {
@@ -1083,18 +1027,8 @@ void BNBCosmics::ExtractImage( const art::Event& e, const std::vector<larcaffe::
 	}
       }
       
-      // std::cout << "[Check Plane Image]" << std::endl;
-      // for (int t=0; t<(int)(img.height());t++) {
-      //   std::cout << m_planeImages[plane]->at( img.height()*1+t);
-      // }
-      // std::cout << std::endl;	      
-      
-      
     	_logger.LOG(::larcaffe::msg::kINFO,__FUNCTION__,__LINE__) <<"image " << range_index << " @ " << plane << " extracted..." << std::endl;
     }//end of loop over planes
-    
-    // convert time coordinate
-    //m_vertex_tw.at(fNPlanes) = (int)(m_vertex_tw.at(fNPlanes)-time_range.start)/plane_compression[fNPlanes];
     
   }// end of image crop ranges
 }//end of ExtractImage

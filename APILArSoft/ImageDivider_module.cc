@@ -16,6 +16,7 @@
 #include "art/Utilities/InputTag.h"
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
+#include "art/Framework/Services/Optional/TFileService.h"
 
 #include "Geometry/Geometry.h" // LArCore
 #include <cmath>
@@ -24,6 +25,7 @@
 #include "TBox.h"
 #include "TLine.h"
 #include "TROOT.h"
+#include "TTree.h"
 
 class ImageDivider;
 
@@ -51,6 +53,31 @@ private:
   TH2D* bg;
   TBox* tpc;
   bool fTestDraw;
+
+  // output tree variables
+  void setupTrees();
+
+  // Output information on the wire coordinates
+  TTree* m_WireInfoTree;
+  int m_plane;
+  int m_wireID;
+  float m_wirestart[3];
+  float m_wireend[3];
+  void storeWireData(); // it does what you think it does
+  
+  // Output information on the event divisions
+  TTree* m_RegionInfoTree;
+  int m_regionid;
+  float m_plane0wirebounds[2];
+  float m_plane1wirebounds[2];
+  float m_plane2wirebounds[2];
+  float m_tickbounds[2];
+  float m_xbounds[2];
+  float m_zbounds[2];
+  float m_ybounds[2];
+  int m_plane0_nwires;
+  int m_plane1_nwires;
+  int m_plane2_nwires;
 };
 
 
@@ -59,7 +86,15 @@ ImageDivider::ImageDivider(fhicl::ParameterSet const & p)
   EDAnalyzer(p)  // ,
  // More initializers here.
 {
-  fTestDraw = false;
+  // define output trees and branches
+  setupTrees();
+
+  // we output a copy of the wire definitions
+  storeWireData();  
+
+  // visualization for debugging
+
+  fTestDraw = true;
   
   test = new TCanvas("test","test", 1200, 600);
   bg = new TH2D("bg", "bg", 100, -10, 1050, 100, -120, 120 );
@@ -67,9 +102,14 @@ ImageDivider::ImageDivider(fhicl::ParameterSet const & p)
   tpc->SetLineColor(kBlack);
   tpc->SetFillColor(0);
   tpc->SetLineWidth(1);
-  test->Draw();
-  bg->Draw();
-  tpc->Draw();
+  
+  if ( fTestDraw ) {
+    test->Draw();
+    bg->Draw();
+    tpc->Draw();
+  }
+
+  
 }
 
 void ImageDivider::cross( double out[], double a[], double b[] ) {
@@ -86,62 +126,61 @@ void ImageDivider::analyze(art::Event const & e)
 {
   // Implementation of required member function here.
   art::ServiceHandle<geo::Geometry> geom;
-  //geo::WireID wid = 
-  //geo::WireGeo* pWire = geom->WirePtr( 
-  // for ( geo::WireID const& wID : geom->IterateWireIDs() ) {
-  //   geo::WireGeo const& Wire = geom->Wire( wID );
-  //   std::cout << "[Wire ID " << wID << "]";
-  //   double start[3];
-  //   double end[3];
-  //   Wire.GetStart( start );
-  //   Wire.GetEnd( end );
-  //   std::cout << " start (" << start[0] << ", " << start[1] << ", " << start[2] << ")  ";
-  //   std::cout << " end (" << end[0] << ", " << end[1] << ", " << end[2] << ")";
-  //   std::cout << std::endl;
-  // }
 
   // We divide the image into certain number of segments in z and t (i.e. x)
   // Then we make an RGB image using only those wires that cross into that box
   // we expect to make about 50 images per event...
   
-  int imgwidth=256;
-  int tickstart = 400;
-  int tickend   = 5800; // 5000 ticks (400+4600+400)
-  // at 384 wires, that is 115.2 cm, 0.3 cm per wire
+  int imgwidth=216;   // number of collection wires in a region (3^2*2^5)
+  double pitch = 0.3; // cm
+  double imgwidth_cm = imgwidth*pitch; // 76.8 cm across
+  double drift_v = 0.108; // cm per usec
+
+  // [ Time axis setup ]
+  // we downsample the time bins as the sampling time is shorter than the shaping time (we really should shape shorter)
+  // we also aim to roughly match the distance of time pixel with the width of a wire pixel
   // at 0.108 cm per usec, 1 wire pitch is 2.75 usec, this is 5-6 ticks
-  int tickblock = 5; // 2.5 microseconds
+  int tickstart = 400;
+  int tickend   = 5800; // 5000 ticks (400+4600+400) middle 4600 is for the 2.3 ms drift...
+  int tickblock = 5; // 2.5 microseconds (electronics shaping time is 2 microseconds
   int ndsticks = (tickend-tickstart)/tickblock; // number of downsampled ticks
-  
-  // divisions for the Z-direction
-  int ncolwires = geom->Nwires(2); // number of collection plane wires
-  int nwire_divs = ncolwires/imgwidth;
-  if ( ncolwires%imgwidth!=0 )
-    nwire_divs+=1;
-  float z0 = 0;
-
-  // division for the Y-direction (233 cm across about)
-  double pitch = 0.3;
-  double imgwidth_cm = imgwidth*pitch;
-  int ny     = 233/(pitch*imgwidth)+1;
-  double y0 = -116.0;
-
-  // division in time
-  int nt_divs = ndsticks/imgwidth;
+  int nt_divs = ndsticks/imgwidth; // number of time divisions
   if ( ndsticks%imgwidth!=0 )
     nt_divs+=1;
+  
+  // [ Z-direction setup ]
+  // The blocks in the z-direction set the size of the region
+  int ncolwires = geom->Nwires(2); // number of collection plane wires
+  int nwire_divs = ncolwires/imgwidth; // number of collection plane block
+  if ( ncolwires%imgwidth!=0 )
+    nwire_divs+=1;
+  float z0 = 0; // origin
+  float zmax = 1100.0;
 
+  // [ Y-direction (233 cm across about) ]
+  // I got these numbers from the geometry service
+  //int ny     = 233.0/(pitch*imgwidth)+1;
+  int ny = 4;
+  double ywidth_cm = 59.0;
+  double y0 = -118.0; // origin 
+  double ymin = -117.0;
+  double ymax = 117.0;
+
+  // if we wanted overlap we would do this: but too many regions, probably
   //int nw = nwire_divs + (nwire_divs-1); // number of w-axis boxes
   //int nt = nt_divs + (nt_divs-1);       // number of t-axis boxes
-  int nw = nwire_divs;
-  int nt = nt_divs;
+  // simple divisions
+  int nw = nwire_divs; // number of wire regions
+  int nt = nt_divs;    // number of time regions
+  
+  std::cout << "Total number of boxes: (" << nw << " nw) X (" << ny << " ny) X (" << nt << " nt) = " << nw*ny*nt << std::endl;
 
-  std::cout << "Total number of boxes: " << nw*ny << " x nt = " << nw*ny*nt << std::endl;
-
-  int largest_nwires =0;
-  int nregions = 0;
+  int largest_nwires =0; // we set the size of the image after the fact here
+  int nregions = 0; // counter
   for ( int iw=0; iw<nw; iw++) {
     for (int iy=0; iy<ny; iy++) {
 
+      // we we wanted overlapping regions...
       //int worigin = iw*(imgwidth/2);
       //int yorigin = iy*(imgwidth/2);
 
@@ -150,20 +189,26 @@ void ImageDivider::analyze(art::Event const & e)
       // start in lower right corner of box
       // direction vectors move counter-clockwise
       double seg0[4][2]; // set origins
-      seg0[0][0] = y0;
-      seg0[0][1] = z0;
-      seg0[1][0] = y0;
-      seg0[1][1] = z0 + pitch*imgwidth;
-      seg0[2][0] = y0 + pitch*imgwidth;
-      seg0[2][1] = z0 + pitch*imgwidth;
-      seg0[3][0] = y0 + pitch*imgwidth;
-      seg0[3][1] = z0;
+      seg0[0][0] = y0 + iy*ywidth_cm;
+      seg0[0][1] = z0 + iw*imgwidth_cm;
+      seg0[1][0] = y0 + iy*ywidth_cm;
+      seg0[1][1] = z0 + (iw+1)*imgwidth_cm;
+      seg0[2][0] = y0 + (iy+1)*ywidth_cm;
+      seg0[2][1] = z0 + (iw+1)*imgwidth_cm;
+      seg0[3][0] = y0 + (iy+1)*ywidth_cm;
+      seg0[3][1] = z0 + iw*imgwidth_cm;
+      
+      double seglen[4] = { imgwidth_cm, ywidth_cm, imgwidth_cm, ywidth_cm };
 
-      if ( fTestDraw ) {
-	TBox* thisseg = new TBox( seg0[0][1], seg0[0][0], seg0[2][1], seg0[2][0] );
-	thisseg->SetLineColor(kRed);
-	thisseg->SetLineWidth(2);
-	thisseg->Draw();
+      if ( seg0[1][1]>zmax ) {
+	seg0[1][1] = seg0[2][1] = zmax;
+      }
+      if ( seg0[2][0]>ymax ) {
+	seg0[2][0] = seg0[3][0] = ymax;
+      }
+
+      if ( seg0[0][0]<ymin ) {
+	seg0[1][0] = seg0[0][0] = ymin;
       }
 
       double dir[4][2] = { {0.0, 1.0},
@@ -171,6 +216,7 @@ void ImageDivider::analyze(art::Event const & e)
 			   {0.0, -1.0},
 			   {-1.0,0.0} }; // set dir vectors
 
+      // FOR DEBUG
       // std::cout << "Testing box" << std::endl;
       // std::cout << "(3:" << seg0[3][1] << "," << seg0[3][0] << ")"
       // 		<< "--(2:" << seg0[2][1] << "," << seg0[2][0] << ")" << std::endl;
@@ -184,11 +230,20 @@ void ImageDivider::analyze(art::Event const & e)
       // std::cout << "(0:" << dir[0][1] << "," << dir[0][0] << ")"
       // 		<< "--(1:" << dir[1][1] << "," << dir[1][0] << ")" << std::endl;
 
+      // for debug we can visualizate these regions
+      std::vector< TLine* > drawnlines;
+      if ( fTestDraw ) {
+	test->Clear();
+	bg->Draw();
+	tpc->Draw();
+	test->Update();
+      }
+
       // length of segments is always imgwidth
       
 
-      // now the fun begins, we test the intersection of wires with these line segments
-      //int nintersect_wires_plane[3] = {0};
+      // now the fun begins: we test the intersection of wires with these line segments
+
       std::vector<int> intersecting_plane_wires[3];
       int nwires = 0;
       for ( geo::WireID const& wID : geom->IterateWireIDs() ) {
@@ -197,13 +252,14 @@ void ImageDivider::analyze(art::Event const & e)
 	double end[3] = {0};
 	Wire.GetStart( start );
 	Wire.GetEnd( end );
-	// these return x,y,z
+	// these return x,y,z (z is beam axis, x is drift axis, y is normal to x,y
 
 	// std::cout << "[Wire ID " << wID << "]";
 	// std::cout << " start (" << start[2] << ", " << start[1] << ")  ";
 	// std::cout << " end (" << end[2] << ", " << end[1] << ")";
 	// std::cout << std::endl;
 	
+	// when we do the intersection tests we move to R2 with (y,z)
 	// calculate wire direction
 	double wiredir[2] = {0};
 	double wirelen = 0.0;
@@ -234,7 +290,7 @@ void ImageDivider::analyze(art::Event const & e)
 
 	  //std::cout << "rxs=" << rxs[2] << " qpxr=" << qpxr[2]  << " qpxs=" << qpxs[2] << std::endl;
 
-	  // test if colinear
+	  // test if colinear (we don't expect this happen)
 	  bool qpxr_zero = true;
 	  bool rxs_zero = true;
 	  for (int v=0; v<3; v++) {
@@ -246,7 +302,7 @@ void ImageDivider::analyze(art::Event const & e)
 
 	  if ( qpxr_zero && rxs_zero ) {
 	    // colinear
-	    //std::cout << " seg " << s << " is colinear" << std::endl;
+	    std::cout << " seg " << s << " is colinear" << std::endl;
 	    continue;
 	  }
 
@@ -269,26 +325,29 @@ void ImageDivider::analyze(art::Event const & e)
 
 	  //std::cout << "u=" << u << " t=" << t << std::endl;
 
-	  if ( u>=0 && u<=wirelen && t>=0 && t<=imgwidth_cm ) {
+	  //if ( u>=0 && u<=wirelen && t>=0 && t<=imgwidth_cm ) {
+	  if ( u>=0 && u<=wirelen && t>=0 && t<=seglen[s] ) {
 	    //std::cout << " seg " << s << " intersects" << std::endl;
 	    if ( fTestDraw ) {
 	      TLine* l = new TLine( start[2], start[1], end[2], end[1] );
 	      l->Draw();
+	      drawnlines.push_back( l ); // we keep these, so we can destroy them later
 	    }
 	    nwires++;
 	    intersecting_plane_wires[ wID.Plane ].push_back( wID.Wire );
-	    continue;
+	    break;
 	  }
 
 	  //std::cout << " seg " << s << " neither intersects nor is parallel" << std::endl;
 	  
 	  
-	}
+	}//loop over box line segments
 	
 	//std::cin.get();
 
       }
 
+      // we finished this region
       std::cout << "Region number of wires. Plane0=" << intersecting_plane_wires[0].size()
 		<< " Plane1=" << intersecting_plane_wires[1].size() 
 		<< " Plane2=" << intersecting_plane_wires[2].size()
@@ -303,7 +362,73 @@ void ImageDivider::analyze(art::Event const & e)
       //int torigin = it*tickblock*(imgwidth/2);
       //}
       //break;
-      nregions++;
+
+      // store this definition
+      m_regionid = nregions;
+      int minplane[3] = { 100000, 100000, 100000 };
+      int maxplane[3] ={ 0, 0, 0 };
+      int max_wires = 0;
+      for (int iplane=0; iplane<3; iplane++) {
+	for (int iwire=0; iwire<(int)intersecting_plane_wires[iplane].size(); iwire++) {
+
+	  if ( minplane[iplane]>intersecting_plane_wires[iplane].at( iwire ) )
+	    minplane[iplane] = intersecting_plane_wires[iplane].at( iwire );
+	  if ( maxplane[iplane]<intersecting_plane_wires[iplane].at( iwire ) )
+	    maxplane[iplane] = intersecting_plane_wires[iplane].at( iwire );
+	}
+	if ( max_wires<(int)intersecting_plane_wires[iplane].size() )
+	  max_wires = (int)intersecting_plane_wires[iplane].size();
+      }
+
+      m_plane0wirebounds[0] = minplane[0];
+      m_plane0wirebounds[1] = maxplane[0];
+      m_plane0_nwires = m_plane0wirebounds[1]-m_plane0wirebounds[0] + 1;
+
+      m_plane1wirebounds[0] = minplane[1];
+      m_plane1wirebounds[1] = maxplane[1];
+      m_plane1_nwires = m_plane1wirebounds[1]-m_plane1wirebounds[0] + 1;
+
+      m_plane2wirebounds[0] = minplane[2];
+      m_plane2wirebounds[1] = maxplane[2];
+      m_plane2_nwires = m_plane2wirebounds[1]-m_plane2wirebounds[0] + 1;
+
+      m_zbounds[0] = seg0[0][1];
+      m_zbounds[1] = seg0[1][1];
+      m_ybounds[0] = seg0[0][0];
+      m_ybounds[1] = seg0[2][0];
+
+      for (int it=0; it<nt; it++) {
+	m_regionid = nregions;
+	m_tickbounds[0] = it*imgwidth;
+	m_tickbounds[1] = (it+1)*imgwidth;
+	m_xbounds[0] = it*imgwidth*tickblock*0.5*drift_v;
+	m_xbounds[1] = (it+1)*imgwidth*tickblock*0.5*drift_v;
+	m_RegionInfoTree->Fill();
+	nregions++;
+      }
+      
+      if (fTestDraw) {
+
+	TBox* thisseg = new TBox( seg0[0][1], seg0[0][0], seg0[2][1], seg0[2][0] );
+	thisseg->SetLineColor(kRed);
+	thisseg->SetLineWidth(2);
+	thisseg->SetFillColor(0);
+	thisseg->SetFillStyle(0);
+	thisseg->Draw();
+
+	test->Update();
+	char testname[50];
+	sprintf( testname, "wire_region_%03d.png", nregions );
+	test->SaveAs( testname );
+	
+	delete thisseg;
+	for ( int i=0; i<(int)drawnlines.size(); i++ ) {
+	  delete drawnlines.at(i);
+	  drawnlines.at(i) = NULL;
+	}
+
+      }
+
     }
     //break;
   }
@@ -313,7 +438,58 @@ void ImageDivider::analyze(art::Event const & e)
   std::cout << "Largest number of wires needed inside of a region: " << largest_nwires << std::endl;
   std::cout << "Raw Memory per event: " << largest_nwires*largest_nwires*nw*ny*nt*2/1.0e6 << " MB" << std::endl;
 
-  test->SaveAs("test.png");
+
+}
+
+void ImageDivider::setupTrees() {
+
+  art::ServiceHandle<art::TFileService> ana_file;
+  m_WireInfoTree     = ana_file->make<TTree>( "wireInfo", "Tree Containing Image and its MC Truth Info" );  // image of the entire event
+  m_WireInfoTree->Branch( "plane", &m_plane, "plane/I" );
+  m_WireInfoTree->Branch( "wireID", &m_wireID, "wireID/I" );
+  m_WireInfoTree->Branch( "start", m_wirestart, "start[3]/F" );
+  m_WireInfoTree->Branch( "end", m_wireend, "end[3]/F" );
+
+  m_RegionInfoTree   = ana_file->make<TTree>( "regionInfo", "Bounding Box Tree and its label" ); // images of each interaction within events
+  m_RegionInfoTree->Branch( "regionid", &m_regionid, "regionid/I" );
+  m_RegionInfoTree->Branch( "plane0_wirebounds", m_plane0wirebounds, "plane0_wirebounds[2]/F" );
+  m_RegionInfoTree->Branch( "plane1_wirebounds", m_plane1wirebounds, "plane1_wirebounds[2]/F" );
+  m_RegionInfoTree->Branch( "plane2_wirebounds", m_plane2wirebounds, "plane2_wirebounds[2]/F" );
+  m_RegionInfoTree->Branch( "plane0_nwires",     &m_plane0_nwires,    "plane0_nwires/I");
+  m_RegionInfoTree->Branch( "plane1_nwires",     &m_plane1_nwires,    "plane1_nwires/I");
+  m_RegionInfoTree->Branch( "plane2_nwires",     &m_plane2_nwires,    "plane2_nwires/I");
+  m_RegionInfoTree->Branch( "zbounds",        m_zbounds,       "zbounds[2]/F" );
+  m_RegionInfoTree->Branch( "ybounds",        m_ybounds,       "ybounds[2]/F" );
+  m_RegionInfoTree->Branch( "xbounds",        m_xbounds,       "xbounds[2]/F" );
+
+}
+
+void ImageDivider::storeWireData() {
+
+
+  // Implementation of required member function here.
+  art::ServiceHandle<geo::Geometry> geom;
+  //geo::WireID wid = 
+  //geo::WireGeo* pWire = geom->WirePtr( 
+  for ( geo::WireID const& wID : geom->IterateWireIDs() ) {
+    geo::WireGeo const& Wire = geom->Wire( wID );
+    m_wireID = (int)wID.Wire;
+    m_plane  = (int)wID.Plane;
+    double start[3];
+    double end[3];
+    Wire.GetStart( start );
+    Wire.GetEnd( end );
+    for (int i=0; i<3; i++) {
+      m_wirestart[i] = (float)start[i];
+      m_wireend[i]   = (float)end[i];
+    }
+    //std::cout << "[Wire ID " << wID << "]";
+    //std::cout << " start (" << start[0] << ", " << start[1] << ", " << start[2] << ")  ";
+    //std::cout << " end (" << end[0] << ", " << end[1] << ", " << end[2] << ")";
+    //std::cout << std::endl;
+    m_WireInfoTree->Fill();
+  }
+
 }
 
 DEFINE_ART_MODULE(ImageDivider)
